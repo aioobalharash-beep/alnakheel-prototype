@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lato:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-headline: "Noto Serif", serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+  --font-lato: "Lato", sans-serif;
+
+  --color-primary-navy: #011F36;
+  --color-secondary-gold: #D4AF37;
+  --color-pearl-white: #FCFBF7;
+  
+  --radius-2xl: 1.25rem;
+}
+
+@layer base {
+  body {
+    @apply bg-pearl-white text-primary-navy font-body antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
