@@ -31,3 +31,14 @@ export interface Transaction {
   amount: number;
   date: string;
 }
+
+export interface BookingData {
+  guestName: string;
+  phone: string;
+  checkIn: Date;
+  checkOut: Date;
+  nights: number;
+  nightlyRate: number;
+  deposit: number;
+  total: number;
+}
