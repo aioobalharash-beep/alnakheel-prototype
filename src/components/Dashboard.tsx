@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { TrendingUp, Bed, Banknote, Star, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { dashboardApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardData {
   revenue: { total: number; trend: number };
@@ -14,16 +15,17 @@ interface DashboardData {
 }
 
 export const Dashboard: React.FC = () => {
+  const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    dashboardApi.get()
+    dashboardApi.get(user?.name || 'Curator')
       .then(setData)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
 
   if (loading) return <DashboardSkeleton />;
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;

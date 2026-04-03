@@ -1,61 +1,26 @@
 import {
+  firestoreUsers,
+  firestoreProperties,
   firestoreBookings,
   firestoreGuests,
   firestoreTransactions,
+  firestoreInvoices,
   firestoreTestimonials,
   firestoreNotifications,
+  firestoreDashboard,
+  firestoreReports,
 } from './firestore';
 
-const API_BASE = '/api';
-
-function getToken(): string | null {
-  return localStorage.getItem('alnakheel_token');
-}
-
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
-  }
-
-  return res.json();
-}
-
-// Auth
+// Auth — Firestore
 export const authApi = {
-  login: (email: string, password: string) =>
-    request<{ token: string; user: any }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }),
-
-  register: (data: { name: string; email: string; password: string; phone?: string }) =>
-    request<{ token: string; user: any }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  me: () => request<any>('/auth/me'),
+  login: (email: string, password: string) => firestoreUsers.login(email, password),
+  register: (data: { name: string; email: string; password: string; phone?: string }) => firestoreUsers.register(data),
+  me: (id: string) => firestoreUsers.getById(id),
 };
 
-// Dashboard
+// Dashboard — Firestore
 export const dashboardApi = {
-  get: () => request<any>('/dashboard'),
+  get: (userName: string) => firestoreDashboard.get(userName),
 };
 
 // Bookings — Firestore
@@ -118,48 +83,40 @@ export const guestsApi = {
   },
 };
 
-// Invoices — Express backend
+// Invoices — Firestore
 export const invoicesApi = {
-  list: (params?: { status?: string }) => {
-    const query = params?.status ? `?status=${params.status}` : '';
-    return request<any[]>(`/invoices${query}`);
-  },
+  list: (params?: { status?: string }) => firestoreInvoices.list(params?.status),
 
-  stats: () => request<{
-    outstanding: number;
-    totalPaid: number;
-    pendingCount: number;
-    overdueCount: number;
-    healthRate: number;
-    awaitingAction: number;
-  }>('/invoices/stats'),
+  stats: () => firestoreInvoices.stats(),
 
-  get: (id: string) => request<any>(`/invoices/${id}`),
+  get: (id: string) => firestoreInvoices.get(id),
 
   update: (id: string, data: { status?: string; vat_compliant?: boolean }) =>
-    request<any>(`/invoices/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    }),
+    firestoreInvoices.update(id, data),
 
   create: (data: { guest_name: string; booking_ref: string; room_type: string; items: { description: string; amount: number }[] }) =>
-    request<any>('/invoices', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    firestoreInvoices.create(data),
 };
 
-// Reports — Express backend
+// Reports — Firestore
 export const reportsApi = {
-  get: () => request<any>('/reports'),
+  get: () => firestoreReports.get(),
 };
 
-// Properties — Express backend
+// Properties — Firestore
 export const propertiesApi = {
-  list: () => request<any[]>('/properties'),
-  get: (id: string) => request<any>(`/properties/${id}`),
-  checkAvailability: (id: string, checkIn: string, checkOut: string) =>
-    request<{ available: boolean }>(`/properties/${id}/availability?check_in=${checkIn}&check_out=${checkOut}`),
+  list: () => firestoreProperties.list() as Promise<any[]>,
+  get: (id: string) => firestoreProperties.get(id),
+  checkAvailability: async (id: string, checkIn: string, checkOut: string) => {
+    const bookings = await firestoreBookings.list();
+    const conflict = bookings.find(b =>
+      b.property_id === id &&
+      b.status !== 'cancelled' &&
+      b.check_in < checkOut &&
+      b.check_out > checkIn
+    );
+    return { available: !conflict };
+  },
 };
 
 // Transactions — Firestore

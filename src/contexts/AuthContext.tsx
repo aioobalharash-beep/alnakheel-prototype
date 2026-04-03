@@ -11,7 +11,6 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
@@ -23,50 +22,56 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('alnakheel_token'));
   const [isLoading, setIsLoading] = useState(true);
 
+  // Restore session from localStorage
   useEffect(() => {
-    if (token) {
-      authApi.me()
-        .then((userData) => {
-          setUser(userData);
-        })
-        .catch(() => {
-          localStorage.removeItem('alnakheel_token');
-          setToken(null);
-          setUser(null);
-        })
-        .finally(() => setIsLoading(false));
+    const stored = localStorage.getItem('alnakheel_user');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Verify user still exists in Firestore
+        authApi.me(parsed.id)
+          .then((userData) => {
+            if (userData) {
+              setUser(userData as User);
+            } else {
+              localStorage.removeItem('alnakheel_user');
+            }
+          })
+          .catch(() => {
+            localStorage.removeItem('alnakheel_user');
+          })
+          .finally(() => setIsLoading(false));
+      } catch {
+        localStorage.removeItem('alnakheel_user');
+        setIsLoading(false);
+      }
     } else {
       setIsLoading(false);
     }
-  }, [token]);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await authApi.login(email, password);
-    localStorage.setItem('alnakheel_token', result.token);
-    setToken(result.token);
+    localStorage.setItem('alnakheel_user', JSON.stringify(result.user));
     setUser(result.user);
   }, []);
 
   const register = useCallback(async (data: { name: string; email: string; password: string; phone?: string }) => {
     const result = await authApi.register(data);
-    localStorage.setItem('alnakheel_token', result.token);
-    setToken(result.token);
+    localStorage.setItem('alnakheel_user', JSON.stringify(result.user));
     setUser(result.user);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('alnakheel_token');
-    setToken(null);
+    localStorage.removeItem('alnakheel_user');
     setUser(null);
   }, []);
 
   return (
     <AuthContext.Provider value={{
       user,
-      token,
       isLoading,
       login,
       register,

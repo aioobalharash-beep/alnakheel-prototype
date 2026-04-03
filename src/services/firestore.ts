@@ -4,12 +4,170 @@ import {
   getDocs,
   getDoc,
   doc,
+  setDoc,
   updateDoc,
   query,
   orderBy,
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import bcryptjs from 'bcryptjs';
+
+// ── Collection refs ──
+
+const usersCol = () => collection(db, 'users');
+const propertiesCol = () => collection(db, 'properties');
+const bookingsCol = () => collection(db, 'bookings');
+const guestsCol = () => collection(db, 'guests');
+const transactionsCol = () => collection(db, 'transactions');
+const invoicesCol = () => collection(db, 'invoices');
+const invoiceItemsCol = () => collection(db, 'invoice_items');
+const testimonialsCol = () => collection(db, 'testimonials');
+const notificationsCol = () => collection(db, 'notifications');
+
+// ── Seed Data ──
+
+let seedInitialized = false;
+
+export async function ensureSeedData() {
+  if (seedInitialized) return;
+  seedInitialized = true;
+
+  // Check if users already exist
+  const usersSnap = await getDocs(usersCol());
+  if (usersSnap.size > 0) return;
+
+  // Seed users
+  const adminHash = bcryptjs.hashSync('admin123', 10);
+  const clientHash = bcryptjs.hashSync('guest123', 10);
+
+  await setDoc(doc(db, 'users', 'u1'), {
+    name: 'Ahmed Al-Said',
+    email: 'ahmed@alnakheel.om',
+    password: adminHash,
+    role: 'admin',
+    phone: '+968 9100 0001',
+    created_at: new Date().toISOString(),
+  });
+
+  await setDoc(doc(db, 'users', 'u2'), {
+    name: 'Salim Al-Harthy',
+    email: 'salim@guest.com',
+    password: clientHash,
+    role: 'client',
+    phone: '+968 9200 0002',
+    created_at: new Date().toISOString(),
+  });
+
+  // Seed properties
+  const properties = [
+    { id: 'p1', name: 'Al-Nakheel Sanctuary', type: 'Luxury Chalet', capacity: 12, area_sqm: 850, nightly_rate: 120, security_deposit: 50, description: 'Premium luxury chalet with desert views', status: 'active' },
+    { id: 'p2', name: 'Al-Bustan Villa', type: 'Deluxe Villa', capacity: 8, area_sqm: 620, nightly_rate: 180, security_deposit: 75, description: 'Exclusive beachfront villa', status: 'active' },
+    { id: 'p3', name: 'Royal Suite A', type: 'Royal Suite', capacity: 4, area_sqm: 320, nightly_rate: 250, security_deposit: 100, description: 'Opulent royal suite with private pool', status: 'active' },
+    { id: 'p4', name: 'Coast View Chalet', type: 'Ocean Chalet', capacity: 6, area_sqm: 480, nightly_rate: 150, security_deposit: 60, description: 'Stunning ocean view chalet', status: 'active' },
+  ];
+  for (const p of properties) {
+    const { id, ...data } = p;
+    await setDoc(doc(db, 'properties', id), { ...data, created_at: new Date().toISOString() });
+  }
+
+  // Seed invoices
+  const invoices = [
+    { id: 'inv1', guest_name: 'Ahmed Al-Said', booking_ref: '#NK-8829', room_type: 'Deluxe Villa', subtotal: 840, vat_amount: 42, total_amount: 882, status: 'pending', vat_compliant: false, issued_date: '2024-10-20', due_date: '2024-11-20' },
+    { id: 'inv2', guest_name: 'Salma bin Rashid', booking_ref: '#NK-9012', room_type: 'Ocean Suite', subtotal: 1220.50, vat_amount: 61.025, total_amount: 1281.525, status: 'pending', vat_compliant: false, issued_date: '2024-10-18', due_date: '2024-11-18' },
+    { id: 'inv3', guest_name: 'Khalid Al-Harthy', booking_ref: '#NK-8801', room_type: 'Royal Suite', subtotal: 1350, vat_amount: 67.5, total_amount: 1417.5, status: 'paid', vat_compliant: true, issued_date: '2024-10-24', due_date: '2024-11-24' },
+    { id: 'inv4', guest_name: 'Nasser Al-Harthy', booking_ref: '#NK-8790', room_type: 'Luxury Chalet', subtotal: 240, vat_amount: 12, total_amount: 252, status: 'paid', vat_compliant: true, issued_date: '2024-10-12', due_date: '2024-11-12' },
+    { id: 'inv5', guest_name: 'Sara Williams', booking_ref: '#NK-9045', room_type: 'Ocean Chalet', subtotal: 750, vat_amount: 37.5, total_amount: 787.5, status: 'overdue', vat_compliant: false, issued_date: '2024-09-15', due_date: '2024-10-15' },
+  ];
+  for (const inv of invoices) {
+    const { id, ...data } = inv;
+    await setDoc(doc(db, 'invoices', id), { ...data, created_at: new Date().toISOString() });
+  }
+
+  // Seed invoice items for inv3
+  await addDoc(invoiceItemsCol(), { invoice_id: 'inv3', description: 'Stay Charges - Royal Suite (3 Nights)', amount: 1200 });
+  await addDoc(invoiceItemsCol(), { invoice_id: 'inv3', description: 'Airport Transfer Service', amount: 150 });
+}
+
+// ── Users / Auth ──
+
+export const firestoreUsers = {
+  async login(email: string, password: string) {
+    await ensureSeedData();
+    const q = query(usersCol(), where('email', '==', email));
+    const snap = await getDocs(q);
+    if (snap.empty) throw new Error('Invalid email or password');
+
+    const userDoc = snap.docs[0];
+    const userData = userDoc.data();
+
+    const valid = bcryptjs.compareSync(password, userData.password);
+    if (!valid) throw new Error('Invalid email or password');
+
+    const user = {
+      id: userDoc.id,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role,
+      phone: userData.phone,
+    };
+
+    return { user };
+  },
+
+  async register(data: { name: string; email: string; password: string; phone?: string }) {
+    await ensureSeedData();
+    const q = query(usersCol(), where('email', '==', data.email));
+    const snap = await getDocs(q);
+    if (!snap.empty) throw new Error('An account with this email already exists');
+
+    const hash = bcryptjs.hashSync(data.password, 10);
+    const docRef = await addDoc(usersCol(), {
+      name: data.name,
+      email: data.email,
+      password: hash,
+      role: 'client',
+      phone: data.phone || '',
+      created_at: new Date().toISOString(),
+    });
+
+    const user = {
+      id: docRef.id,
+      name: data.name,
+      email: data.email,
+      role: 'client' as const,
+      phone: data.phone,
+    };
+
+    return { user };
+  },
+
+  async getById(id: string) {
+    const ref = doc(db, 'users', id);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    return { id: snap.id, name: data.name, email: data.email, role: data.role, phone: data.phone };
+  },
+};
+
+// ── Properties ──
+
+export const firestoreProperties = {
+  async list() {
+    await ensureSeedData();
+    const q = query(propertiesCol(), where('status', '==', 'active'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+
+  async get(id: string) {
+    const ref = doc(db, 'properties', id);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  },
+};
 
 // ── Bookings ──
 
@@ -32,12 +190,6 @@ export interface FirestoreBooking {
   receipt_image?: string;
   created_at: string;
 }
-
-const bookingsCol = () => collection(db, 'bookings');
-const guestsCol = () => collection(db, 'guests');
-const transactionsCol = () => collection(db, 'transactions');
-const testimonialsCol = () => collection(db, 'testimonials');
-const notificationsCol = () => collection(db, 'notifications');
 
 export const firestoreBookings = {
   async create(data: {
@@ -224,6 +376,203 @@ export const firestoreTransactions = {
     const q = query(transactionsCol(), orderBy('created_at', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.slice(0, limit).map(d => ({ id: d.id, ...d.data() }));
+  },
+};
+
+// ── Invoices ──
+
+export const firestoreInvoices = {
+  async list(statusFilter?: string) {
+    await ensureSeedData();
+    const snap = await getDocs(invoicesCol());
+    let invoices = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+    if (statusFilter) {
+      invoices = invoices.filter(inv => inv.status === statusFilter);
+    }
+    invoices.sort((a: any, b: any) => (b.issued_date || '').localeCompare(a.issued_date || ''));
+    return invoices;
+  },
+
+  async stats() {
+    await ensureSeedData();
+    const snap = await getDocs(invoicesCol());
+    const all = snap.docs.map(d => d.data());
+
+    const outstanding = all
+      .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+
+    const totalPaid = all
+      .filter(inv => inv.status === 'paid')
+      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+
+    const pendingCount = all.filter(inv => inv.status === 'pending').length;
+    const overdueCount = all.filter(inv => inv.status === 'overdue').length;
+    const paidCount = all.filter(inv => inv.status === 'paid').length;
+    const healthRate = all.length > 0 ? parseFloat(((paidCount / all.length) * 100).toFixed(1)) : 0;
+
+    return {
+      outstanding,
+      totalPaid,
+      pendingCount,
+      overdueCount,
+      healthRate,
+      awaitingAction: pendingCount + overdueCount,
+    };
+  },
+
+  async get(id: string) {
+    const ref = doc(db, 'invoices', id);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const invoice = { id: snap.id, ...snap.data() };
+
+    // Get items
+    const itemsSnap = await getDocs(query(invoiceItemsCol(), where('invoice_id', '==', id)));
+    const items = itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    return { ...invoice, items };
+  },
+
+  async update(id: string, data: { status?: string; vat_compliant?: boolean }) {
+    const ref = doc(db, 'invoices', id);
+    const updates: any = {};
+    if (data.status !== undefined) updates.status = data.status;
+    if (data.vat_compliant !== undefined) updates.vat_compliant = data.vat_compliant;
+    await updateDoc(ref, updates);
+
+    return this.get(id);
+  },
+
+  async create(data: { guest_name: string; booking_ref: string; room_type: string; items: { description: string; amount: number }[] }) {
+    const subtotal = data.items.reduce((sum, item) => sum + item.amount, 0);
+    const vatAmount = subtotal * 0.05;
+    const totalAmount = subtotal + vatAmount;
+
+    const docRef = await addDoc(invoicesCol(), {
+      guest_name: data.guest_name,
+      booking_ref: data.booking_ref,
+      room_type: data.room_type,
+      subtotal,
+      vat_amount: vatAmount,
+      total_amount: totalAmount,
+      status: 'pending',
+      vat_compliant: true,
+      issued_date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
+    });
+
+    for (const item of data.items) {
+      await addDoc(invoiceItemsCol(), { invoice_id: docRef.id, description: item.description, amount: item.amount });
+    }
+
+    return this.get(docRef.id);
+  },
+};
+
+// ── Dashboard (computed from Firestore) ──
+
+export const firestoreDashboard = {
+  async get(userName: string) {
+    const bookings = await firestoreBookings.list();
+    const properties = await firestoreProperties.list();
+
+    const paidBookings = bookings.filter(b => b.payment_status === 'paid');
+    const revenueTotal = paidBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const lastMonthRevenue = revenueTotal * 0.88;
+    const revenueTrend = lastMonthRevenue > 0 ? Math.round(((revenueTotal - lastMonthRevenue) / lastMonthRevenue) * 100) : 0;
+
+    const pendingBookings = bookings.filter(b => b.status === 'pending').length;
+
+    const activeProperties = properties.length;
+    const occupiedPropertyIds = new Set(bookings.filter(b => b.status === 'checked-in').map(b => b.property_id));
+    const occupancy = activeProperties > 0 ? Math.round((occupiedPropertyIds.size / activeProperties) * 100) : 0;
+
+    const upcomingBookings = bookings
+      .filter(b => b.status === 'confirmed' || b.status === 'pending')
+      .sort((a, b) => a.check_in.localeCompare(b.check_in));
+
+    const nextCheckIn = upcomingBookings.length > 0 ? {
+      guest_name: upcomingBookings[0].guest_name,
+      property_name: upcomingBookings[0].property_name,
+      check_in: upcomingBookings[0].check_in,
+      check_out: upcomingBookings[0].check_out,
+    } : null;
+
+    const recentBookings = bookings
+      .filter(b => b.status !== 'cancelled')
+      .slice(0, 10)
+      .map(b => ({
+        check_in: b.check_in,
+        check_out: b.check_out,
+        guest_name: b.guest_name,
+        property_name: b.property_name,
+      }));
+
+    return {
+      revenue: { total: revenueTotal, trend: revenueTrend },
+      pendingBookings,
+      occupancy,
+      totalProperties: activeProperties,
+      nextCheckIn,
+      recentBookings,
+      userName,
+    };
+  },
+};
+
+// ── Reports (computed from Firestore) ──
+
+export const firestoreReports = {
+  async get() {
+    const bookings = await firestoreBookings.list();
+    const properties = await firestoreProperties.list();
+
+    const activeProperties = properties.length;
+    const occupiedIds = new Set(bookings.filter(b => b.status === 'checked-in').map(b => b.property_id));
+    const occupancyRate = activeProperties > 0 ? parseFloat(((occupiedIds.size / activeProperties) * 100).toFixed(1)) : 0;
+
+    const paidBookings = bookings.filter(b => b.payment_status === 'paid');
+    const avgNightlyRate = paidBookings.length > 0 ? Math.round(paidBookings.reduce((s, b) => s + b.nightly_rate, 0) / paidBookings.length) : 0;
+    const monthlyRevenue = paidBookings.reduce((s, b) => s + b.total_amount, 0);
+
+    // Occupancy by property
+    const propBookingCounts: Record<string, { name: string; nights: number; bookings: number }> = {};
+    for (const p of properties) {
+      propBookingCounts[p.id as string] = { name: (p as any).name, nights: 0, bookings: 0 };
+    }
+    for (const b of bookings.filter(bk => bk.status !== 'cancelled')) {
+      if (propBookingCounts[b.property_id]) {
+        propBookingCounts[b.property_id].nights += b.nights;
+        propBookingCounts[b.property_id].bookings += 1;
+      }
+    }
+    const maxNights = Math.max(...Object.values(propBookingCounts).map(p => p.nights), 1);
+    const occupancyByProperty = Object.values(propBookingCounts)
+      .map(p => ({ name: p.name, percentage: Math.round((p.nights / maxNights) * 100), bookings: p.bookings }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    const revenueByMonth = [
+      { month: 'JAN', actual: 24000, forecast: 32000 },
+      { month: 'FEB', actual: 36000, forecast: 40000 },
+      { month: 'MAR', actual: 42000, forecast: 44000 },
+      { month: 'APR', actual: 52000, forecast: 48000 },
+      { month: 'MAY', actual: 48000, forecast: 52000 },
+      { month: 'JUN', actual: 56000, forecast: 60000 },
+    ];
+
+    const reviews = [
+      { name: 'Sarah J.', stay: '4 nights in Al-Bustan', text: 'The service was impeccable. Every detail from the arrival to the private dining was handled with pure Omani hospitality.', rating: 5 },
+      { name: 'Ahmed M.', stay: '2 nights in Coast View', text: 'Exceptional views and the modern luxury styling of the portal made booking very easy. Will return next month.', rating: 4 },
+      { name: 'Elena R.', stay: '1 week in Royal Suite', text: 'A true desert sanctuary. The staff anticipated our needs before we even asked. Pure 5-star experience.', rating: 5 },
+    ];
+
+    return {
+      stats: { occupancyRate, avgNightlyRate, monthlyRevenue, guestSatisfaction: 4.9 },
+      occupancyByProperty,
+      revenueByMonth,
+      reviews,
+    };
   },
 };
 

@@ -4,12 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite --port=3000 --host=0.0.0.0\" \"tsx server/index.ts\"",
-    "dev:client": "vite --port=3000 --host=0.0.0.0",
-    "dev:server": "tsx server/index.ts",
+    "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "NODE_ENV=production tsx server/index.ts",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
