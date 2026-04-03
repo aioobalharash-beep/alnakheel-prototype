@@ -14,11 +14,12 @@ import { Reports } from './components/Reports';
 import { Sanctuary } from './components/Sanctuary';
 import { Booking } from './components/Booking';
 import { Confirmation } from './components/Confirmation';
-import { View, Mode } from './types';
+import { View, Mode, BookingData } from './types';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('client');
   const [currentView, setCurrentView] = useState<View>('sanctuary');
+  const [bookingData, setBookingData] = useState<BookingData | null>(null);
 
   const toggleMode = () => {
     if (mode === 'client') {
@@ -43,13 +44,16 @@ export default function App() {
 
   const renderClientView = () => {
     switch (currentView) {
-      case 'sanctuary': 
+      case 'sanctuary':
         return <Sanctuary onBookNow={() => setCurrentView('booking')} />;
-      case 'booking': 
-        return <Booking onProceed={() => setCurrentView('confirmation')} />;
-      case 'confirmation': 
-        return <Confirmation onBack={() => setCurrentView('sanctuary')} />;
-      default: 
+      case 'booking':
+        return <Booking onProceed={(data: BookingData) => {
+          setBookingData(data);
+          setCurrentView('confirmation');
+        }} />;
+      case 'confirmation':
+        return <Confirmation bookingData={bookingData} onBack={() => setCurrentView('sanctuary')} />;
+      default:
         return <Sanctuary onBookNow={() => setCurrentView('booking')} />;
     }
   };
