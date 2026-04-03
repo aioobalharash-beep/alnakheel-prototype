@@ -1,27 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { 
-  Bed, 
-  Banknote, 
-  TrendingUp, 
-  Star, 
-  Download, 
+import {
+  Bed,
+  Banknote,
+  TrendingUp,
+  Star,
+  Download,
   Calendar as CalendarIcon,
-  Search
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { reportsApi } from '../services/api';
+
+interface ReportData {
+  stats: {
+    occupancyRate: number;
+    avgNightlyRate: number;
+    monthlyRevenue: number;
+    guestSatisfaction: number;
+  };
+  occupancyByProperty: { name: string; percentage: number; bookings: number }[];
+  revenueByMonth: { month: string; actual: number; forecast: number }[];
+  reviews: { name: string; stay: string; text: string; rating: number }[];
+}
 
 export const Reports: React.FC = () => {
-  const stats = [
-    { label: 'Occupancy Rate', value: '84.5%', trend: '+4.2% vs LW', icon: Bed, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Avg Nightly Rate', value: '145 OMR', trend: '+12% vs LY', icon: Banknote, color: 'bg-amber-50 text-amber-600' },
-    { label: 'Monthly Revenue', value: '42,800 OMR', trend: 'Stable', icon: TrendingUp, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Guest Satisfaction', value: '4.9/5.0', trend: 'Excellent', icon: Star, color: 'bg-purple-50 text-purple-600' },
+  const [data, setData] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    reportsApi.get()
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
+  if (!data) return null;
+
+  const statCards = [
+    { label: 'Occupancy Rate', value: `${data.stats.occupancyRate}%`, trend: '+4.2% vs LW', icon: Bed, color: 'bg-blue-50 text-blue-600' },
+    { label: 'Avg Nightly Rate', value: `${data.stats.avgNightlyRate} OMR`, trend: '+12% vs LY', icon: Banknote, color: 'bg-amber-50 text-amber-600' },
+    { label: 'Monthly Revenue', value: `${(data.stats.monthlyRevenue / 1000).toFixed(1)}k OMR`, trend: 'Stable', icon: TrendingUp, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Guest Satisfaction', value: `${data.stats.guestSatisfaction}/5.0`, trend: 'Excellent', icon: Star, color: 'bg-purple-50 text-purple-600' },
   ];
 
   return (
     <div className="p-6 md:p-8 space-y-10 max-w-7xl mx-auto">
-      {/* Header */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <p className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase font-lato">Performance Overview</p>
@@ -40,10 +64,9 @@ export const Reports: React.FC = () => {
         </div>
       </section>
 
-      {/* Stats Grid */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <motion.div 
+        {statCards.map((stat, i) => (
+          <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -62,16 +85,15 @@ export const Reports: React.FC = () => {
             </div>
             {stat.label === 'Occupancy Rate' && (
               <div className="w-full bg-primary-navy/5 h-1.5 rounded-full mt-4 overflow-hidden">
-                <div className="bg-primary-navy h-full rounded-full" style={{ width: '84.5%' }}></div>
+                <div className="bg-primary-navy h-full rounded-full" style={{ width: `${data.stats.occupancyRate}%` }}></div>
               </div>
             )}
           </motion.div>
         ))}
       </section>
 
-      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           className="lg:col-span-2 bg-white rounded-2xl p-8 shadow-sm border border-primary-navy/5"
@@ -92,23 +114,24 @@ export const Reports: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="relative h-64 w-full flex items-end justify-between px-4 pb-8 border-b border-primary-navy/10">
-            {['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN'].map((month, i) => {
-              const heights = [32, 40, 44, 48, 52, 60];
-              const actuals = [24, 36, 42, 52, 48, 56];
+            {data.revenueByMonth.map((month, i) => {
+              const maxVal = Math.max(...data.revenueByMonth.map(m => Math.max(m.actual, m.forecast)));
+              const forecastHeight = (month.forecast / maxVal) * 220;
+              const actualHeight = (month.actual / maxVal) * 220;
               return (
-                <div key={month} className="group relative flex flex-col items-center gap-2 w-12">
-                  <div className="w-full bg-secondary-gold/20 rounded-t-lg transition-all group-hover:bg-secondary-gold/30" style={{ height: `${heights[i] * 4}px` }}></div>
-                  <div className="w-full bg-primary-navy rounded-t-lg absolute bottom-0 transition-all group-hover:scale-y-105 origin-bottom" style={{ height: `${actuals[i] * 4}px` }}></div>
-                  <span className="text-[10px] font-bold text-primary-navy/40 absolute -bottom-8">{month}</span>
+                <div key={month.month} className="group relative flex flex-col items-center gap-2 w-12">
+                  <div className="w-full bg-secondary-gold/20 rounded-t-lg transition-all group-hover:bg-secondary-gold/30" style={{ height: `${forecastHeight}px` }}></div>
+                  <div className="w-full bg-primary-navy rounded-t-lg absolute bottom-0 transition-all group-hover:scale-y-105 origin-bottom" style={{ height: `${actualHeight}px` }}></div>
+                  <span className="text-[10px] font-bold text-primary-navy/40 absolute -bottom-8">{month.month}</span>
                 </div>
               );
             })}
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           className="bg-primary-navy rounded-2xl p-8 shadow-xl text-white flex flex-col justify-between"
@@ -118,22 +141,18 @@ export const Reports: React.FC = () => {
             <p className="text-sm text-white/60 mt-2">Highest performing chalets this month.</p>
           </div>
           <div className="space-y-6 my-8">
-            {[
-              { name: 'Al-Bustan Villa', val: 98 },
-              { name: 'Royal Suite A', val: 82 },
-              { name: 'Coast View Chalet', val: 74 },
-            ].map(p => (
+            {data.occupancyByProperty.map(p => (
               <div key={p.name} className="space-y-2">
                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
                   <span>{p.name}</span>
-                  <span>{p.val}%</span>
+                  <span>{p.percentage}%</span>
                 </div>
                 <div className="w-full bg-white/10 h-1 rounded-full">
-                  <motion.div 
+                  <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${p.val}%` }}
+                    animate={{ width: `${p.percentage}%` }}
                     transition={{ duration: 1.5, delay: 0.5 }}
-                    className="bg-secondary-gold h-full rounded-full" 
+                    className="bg-secondary-gold h-full rounded-full"
                   />
                 </div>
               </div>
@@ -154,12 +173,8 @@ export const Reports: React.FC = () => {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            { name: 'Sarah J.', stay: '4 nights in Al-Bustan', text: 'The service was impeccable. Every detail from the arrival to the private dining was handled with pure Omani hospitality.', rating: 5 },
-            { name: 'Ahmed M.', stay: '2 nights in Coast View', text: 'Exceptional views and the modern luxury styling of the portal made booking very easy. Will return next month.', rating: 4 },
-            { name: 'Elena R.', stay: '1 week in Royal Suite', text: 'A true desert sanctuary. The staff anticipated our needs before we even asked. Pure 5-star experience.', rating: 5 },
-          ].map((review, i) => (
-            <motion.div 
+          {data.reviews.map((review, i) => (
+            <motion.div
               key={review.name}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
