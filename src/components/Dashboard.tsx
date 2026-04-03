@@ -1,12 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Bed, Banknote, Star, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { TrendingUp, Bed, Banknote, Star, ChevronLeft, ChevronRight, User, CalendarCheck, Phone, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { getBookings, StoredBooking } from '@/src/lib/firebase';
 
 export const Dashboard: React.FC = () => {
+  const [bookings, setBookings] = useState<StoredBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getBookings()
+      .then(setBookings)
+      .catch((err) => console.error('Failed to load bookings:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalRevenue = bookings.reduce((sum, b) => sum + b.total, 0);
+  const confirmedCount = bookings.filter((b) => b.status === 'confirmed').length;
+
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
   return (
     <div className="p-6 md:p-8 space-y-8 max-w-4xl mx-auto">
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-1"
@@ -17,7 +34,7 @@ export const Dashboard: React.FC = () => {
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Revenue Card */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
@@ -28,31 +45,32 @@ export const Dashboard: React.FC = () => {
             <Banknote className="text-secondary-gold" size={20} />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-headline">OMR 12,480.00</span>
-            <span className="text-emerald-600 text-xs font-bold">+12%</span>
+            <span className="text-2xl font-bold font-headline">OMR {totalRevenue.toLocaleString()}</span>
           </div>
-          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">Last 30 days performance</p>
+          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">From {bookings.length} booking{bookings.length !== 1 ? 's' : ''}</p>
         </motion.div>
 
-        {/* Pending Bookings */}
-        <motion.div 
+        {/* Confirmed Bookings */}
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
           className="bg-primary-navy p-6 rounded-2xl shadow-lg text-white"
         >
           <div className="flex justify-between items-start mb-2">
-            <span className="text-white/50 font-bold text-[10px] uppercase tracking-widest">Pending Bookings</span>
+            <span className="text-white/50 font-bold text-[10px] uppercase tracking-widest">Confirmed Bookings</span>
             <Star className="text-secondary-gold" size={20} fill="currentColor" />
           </div>
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold font-headline">08</span>
-            <span className="bg-secondary-gold/20 text-secondary-gold px-2 py-0.5 rounded text-[10px] font-bold uppercase">Action Required</span>
+            <span className="text-3xl font-bold font-headline">{String(confirmedCount).padStart(2, '0')}</span>
+            {confirmedCount > 0 && (
+              <span className="bg-secondary-gold/20 text-secondary-gold px-2 py-0.5 rounded text-[10px] font-bold uppercase">Live</span>
+            )}
           </div>
         </motion.div>
 
         {/* Occupancy */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
@@ -65,7 +83,7 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center gap-4">
             <span className="text-2xl font-bold font-headline">94%</span>
             <div className="flex-1 h-1.5 bg-primary-navy/10 rounded-full overflow-hidden">
-              <motion.div 
+              <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: '94%' }}
                 transition={{ duration: 1, delay: 0.5 }}
@@ -76,101 +94,89 @@ export const Dashboard: React.FC = () => {
         </motion.div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Condensed Calendar */}
-        <motion.section 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white p-6 rounded-3xl shadow-sm border border-primary-navy/5"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-bold font-headline">October 2023</h3>
-            <div className="flex gap-2">
-              <button className="p-1 hover:bg-primary-navy/5 rounded-full"><ChevronLeft size={20} /></button>
-              <button className="p-1 hover:bg-primary-navy/5 rounded-full"><ChevronRight size={20} /></button>
-            </div>
+      {/* Live Bookings from Firebase */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="space-y-4"
+      >
+        <div className="flex justify-between items-end">
+          <div>
+            <h3 className="text-xl font-bold font-headline">Guest Bookings</h3>
+            <p className="text-xs text-primary-navy/50">Live data from your database</p>
           </div>
-          <div className="grid grid-cols-7 gap-y-2 text-center text-xs">
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
-              <span key={d} className="font-bold text-primary-navy/40 uppercase mb-2">{d}</span>
-            ))}
-            {Array.from({ length: 14 }).map((_, i) => {
-              const day = i + 1;
-              const isToday = day === 4;
-              const isBooked = day >= 5 && day <= 7;
-              return (
-                <span 
-                  key={i} 
-                  className={cn(
-                    "py-2 font-medium rounded-xl transition-colors",
-                    isToday && "bg-secondary-gold text-white",
-                    isBooked && "bg-primary-navy text-white",
-                    !isToday && !isBooked && "text-primary-navy/80"
-                  )}
-                >
-                  {day}
-                </span>
-              );
-            })}
-          </div>
-          <div className="mt-6 flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-secondary-gold"></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Today</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-primary-navy"></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Booked</span>
-            </div>
-          </div>
-        </motion.section>
+          <button
+            onClick={() => {
+              setLoading(true);
+              getBookings().then(setBookings).finally(() => setLoading(false));
+            }}
+            className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold hover:underline"
+          >
+            Refresh
+          </button>
+        </div>
 
-        {/* Next Check-In */}
-        <motion.section 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5 }}
-          className="space-y-4"
-        >
-          <h3 className="text-xl font-bold font-headline">Next Check-In</h3>
-          <div className="relative group overflow-hidden rounded-2xl h-56 shadow-lg">
-            <img 
-              src="https://picsum.photos/seed/oman-villa/800/600" 
-              alt="Luxury villa" 
-              className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-transform duration-700"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 p-6 flex flex-col justify-end">
-              <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-bold text-primary-navy">The Royal Palm Suite</h4>
-                    <p className="text-xs text-primary-navy/60">Guest: Salim Al-Harthy</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-secondary-gold">19:00</p>
-                    <p className="text-[10px] uppercase font-bold text-primary-navy/40">Arrival</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-primary-navy/10 flex items-center justify-center">
-                      <User size={14} />
-                    </div>
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-secondary-gold flex items-center justify-center text-[10px] font-bold text-white">
-                      +2
-                    </div>
-                  </div>
-                  <button className="bg-primary-navy text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all">
-                    View Details
-                  </button>
-                </div>
-              </div>
-            </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 size={28} className="text-secondary-gold animate-spin" />
           </div>
-        </motion.section>
-      </div>
+        ) : bookings.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-primary-navy/5">
+            <CalendarCheck size={40} className="text-primary-navy/15 mx-auto mb-4" />
+            <p className="font-bold text-primary-navy/40">No bookings yet</p>
+            <p className="text-xs text-primary-navy/30 mt-1">
+              When a guest books through the app, their reservation will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {bookings.map((booking, i) => (
+              <motion.div
+                key={booking.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-white p-5 rounded-2xl shadow-sm border border-primary-navy/5 flex items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-11 h-11 rounded-full bg-primary-navy/5 flex items-center justify-center flex-shrink-0">
+                    <User size={18} className="text-primary-navy/50" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-primary-navy truncate">{booking.guestName}</h4>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-primary-navy/50">
+                        {formatDate(booking.checkIn)} → {formatDate(booking.checkOut)}
+                      </span>
+                      <span className="text-[10px] font-bold text-primary-navy/30">·</span>
+                      <span className="text-[10px] font-bold text-primary-navy/40">
+                        {booking.nights} night{booking.nights !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Phone size={10} className="text-primary-navy/30" />
+                      <span className="text-[10px] text-primary-navy/40">+968 {booking.phone}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <p className="font-bold font-headline text-primary-navy">{booking.total} OMR</p>
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
+                    booking.status === 'confirmed'
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-primary-navy/5 text-primary-navy/40"
+                  )}>
+                    {booking.status}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.section>
     </div>
   );
 };

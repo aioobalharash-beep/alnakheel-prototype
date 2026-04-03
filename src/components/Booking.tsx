@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { BookingData } from '@/src/types';
+import { saveBooking } from '@/src/lib/firebase';
 
 const NIGHTLY_RATE = 120;
 const SECURITY_DEPOSIT = 50;
@@ -110,21 +111,30 @@ export const Booking: React.FC<BookingProps> = ({ onProceed }) => {
 
   const canSubmit = checkIn && checkOut && nights > 0 && guestName.trim().length > 0 && phone.trim().length >= 4;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit || !checkIn || !checkOut) return;
     setIsLoading(true);
-    setTimeout(() => {
-      onProceed({
-        guestName: guestName.trim(),
-        phone: phone.trim(),
-        checkIn,
-        checkOut,
-        nights,
-        nightlyRate: NIGHTLY_RATE,
-        deposit: SECURITY_DEPOSIT,
-        total: grandTotal,
-      });
-    }, 2200);
+
+    const bookingData: BookingData = {
+      guestName: guestName.trim(),
+      phone: phone.trim(),
+      checkIn,
+      checkOut,
+      nights,
+      nightlyRate: NIGHTLY_RATE,
+      deposit: SECURITY_DEPOSIT,
+      total: grandTotal,
+    };
+
+    try {
+      await saveBooking(bookingData);
+    } catch (err) {
+      console.error('Failed to save booking:', err);
+    }
+
+    // Small delay for the payment animation feel
+    await new Promise((r) => setTimeout(r, 1500));
+    onProceed(bookingData);
   };
 
   const formatDate = (d: Date) =>
