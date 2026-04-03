@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import type { Property } from '../types';
@@ -104,11 +104,14 @@ export const Booking: React.FC = () => {
     try {
       const result = await bookingsApi.create({
         property_id: property.id,
+        property_name: property.name,
         guest_name: guestName.trim(),
         guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
         guest_email: guestEmail || undefined,
         check_in: checkIn,
         check_out: checkOut,
+        nightly_rate: property.nightly_rate,
+        security_deposit: property.security_deposit,
       });
 
       navigate('/confirmation', {
@@ -148,6 +151,15 @@ export const Booking: React.FC = () => {
 
   return (
     <div className="p-6 space-y-10 max-w-lg mx-auto">
+      {/* Back Button */}
+      <button
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
+      >
+        <ArrowLeft size={18} />
+        Back to Home
+      </button>
+
       <section className="text-center space-y-2">
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Reservation</span>
         <h2 className="font-headline text-4xl font-bold text-primary-navy">Secure your retreat</h2>

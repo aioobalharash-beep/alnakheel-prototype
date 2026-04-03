@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle2, MapPin, ChevronRight, Instagram, MessageCircle } from 'lucide-react';
+import { CheckCircle2, MapPin, ChevronRight, Instagram, MessageCircle, ArrowLeft } from 'lucide-react';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +29,15 @@ export const Confirmation: React.FC = () => {
 
   return (
     <div className="p-6 space-y-8 max-w-lg mx-auto">
+      {/* Back Button */}
+      <button
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
+      >
+        <ArrowLeft size={18} />
+        Back to Home
+      </button>
+
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}

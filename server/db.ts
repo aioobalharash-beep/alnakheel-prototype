@@ -173,7 +173,7 @@ function seedData() {
 
   // Invoice items for inv3 (the preview one)
   db.prepare(`INSERT INTO invoice_items (invoice_id, description, amount) VALUES (?, ?, ?)`).run('inv3', 'Stay Charges - Royal Suite (3 Nights)', 1200);
-  db.prepare(`INSERT INTO invoice_items (invoice_id, description, amount) VALUES (?, ?, ?)`).run('inv3', 'Private Chef Services', 150);
+  db.prepare(`INSERT INTO invoice_items (invoice_id, description, amount) VALUES (?, ?, ?)`).run('inv3', 'Airport Transfer Service', 150);
 
   // Transactions
   const transactions = [

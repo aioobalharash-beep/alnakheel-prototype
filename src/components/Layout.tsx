@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Calendar as CalendarIcon,
@@ -42,10 +42,10 @@ export const Layout: React.FC = () => {
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-primary-navy text-white h-screen sticky top-0 py-8 px-6">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold tracking-tighter uppercase">Al-Nakheel</h1>
+        <Link to="/" className="block mb-10 group">
+          <h1 className="text-2xl font-bold tracking-tighter uppercase group-hover:text-secondary-gold transition-colors">Al-Nakheel</h1>
           <p className="text-[10px] font-lato uppercase tracking-widest text-white/50 font-bold">Management Portal</p>
-        </div>
+        </Link>
 
         <nav className="flex-1 space-y-2">
           {navItems.map((item) => (
@@ -90,7 +90,7 @@ export const Layout: React.FC = () => {
             <button className="md:hidden p-2 rounded-full hover:bg-primary-navy/5">
               <Menu size={20} />
             </button>
-            <h2 className="text-lg font-bold tracking-[0.15em] uppercase font-headline md:hidden">Al-Nakheel</h2>
+            <Link to="/" className="text-lg font-bold tracking-[0.15em] uppercase font-headline md:hidden hover:text-secondary-gold transition-colors">Al-Nakheel</Link>
             <h2 className="hidden md:block text-xl font-bold font-headline capitalize">{currentLabel}</h2>
           </div>
 

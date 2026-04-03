@@ -1,13 +1,13 @@
 import React from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Calendar as CalendarIcon, LogIn, ShieldCheck } from 'lucide-react';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Home, Calendar as CalendarIcon, LogIn, LogOut, ShieldCheck } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ClientLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
 
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
@@ -19,33 +19,49 @@ export const ClientLayout: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-pearl-white flex flex-col">
       {/* Client Top Bar */}
       <header className="fixed top-0 w-full z-50 bg-pearl-white/90 backdrop-blur-xl shadow-[0px_10px_30px_rgba(1,31,54,0.04)] px-6 h-16 flex items-center justify-between">
-        <h1
-          className="font-headline text-xl font-bold text-primary-navy tracking-widest uppercase cursor-pointer"
-          onClick={() => navigate('/')}
+        <Link
+          to="/"
+          className="font-headline text-xl font-bold text-primary-navy tracking-widest uppercase"
         >
           Al-Nakheel
-        </h1>
-        <div className="flex items-center gap-4">
+        </Link>
+        <div className="flex items-center gap-3">
           {isAdmin && (
             <button
               onClick={() => navigate('/admin')}
               className="p-2 rounded-full hover:bg-primary-navy/5 text-primary-navy/40 transition-colors"
-              title="Switch to Admin Portal"
+              title="Admin Portal"
             >
               <ShieldCheck size={20} />
             </button>
           )}
-          <button
-            onClick={() => navigate(user ? '/' : '/login')}
-            className="p-2 rounded-full hover:bg-primary-navy/5 text-primary-navy transition-colors"
-            title={user ? user.name : 'Sign In'}
-          >
-            <LogIn size={20} />
-          </button>
+          {user ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-primary-navy/5 text-primary-navy transition-colors text-xs font-bold uppercase tracking-wider"
+              title="Sign Out"
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-navy text-white text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
+            >
+              <LogIn size={18} />
+              <span className="hidden sm:inline">Login</span>
+            </button>
+          )}
         </div>
       </header>
 

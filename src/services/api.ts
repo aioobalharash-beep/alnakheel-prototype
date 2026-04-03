@@ -1,3 +1,5 @@
+import { firestoreBookings, firestoreGuests, firestoreTransactions } from './firestore';
+
 const API_BASE = '/api';
 
 function getToken(): string | null {
@@ -28,7 +30,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return res.json();
 }
 
-// Auth
+// Auth — still uses Express backend
 export const authApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {
@@ -45,65 +47,61 @@ export const authApi = {
   me: () => request<any>('/auth/me'),
 };
 
-// Dashboard
+// Dashboard — still uses Express backend
 export const dashboardApi = {
   get: () => request<any>('/dashboard'),
 };
 
-// Bookings
+// Bookings — powered by Firestore
 export const bookingsApi = {
-  create: (data: {
+  create: async (data: {
     property_id: string;
+    property_name: string;
     guest_name: string;
     guest_phone: string;
     guest_email?: string;
     check_in: string;
     check_out: string;
-  }) => request<{ booking: any; property_name: string }>('/bookings', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  list: (params?: { status?: string }) => {
-    const query = params?.status ? `?status=${params.status}` : '';
-    return request<{ bookings: any[]; total: number }>(`/bookings${query}`);
+    nightly_rate: number;
+    security_deposit: number;
+  }) => {
+    const booking = await firestoreBookings.create(data);
+    return { booking, property_name: data.property_name };
   },
 
-  get: (id: string) => request<any>(`/bookings/${id}`),
+  list: async (params?: { status?: string }) => {
+    const bookings = await firestoreBookings.list();
+    const filtered = params?.status
+      ? bookings.filter(b => b.status === params.status)
+      : bookings;
+    return { bookings: filtered, total: filtered.length };
+  },
 
-  update: (id: string, data: { status?: string; payment_status?: string }) =>
-    request<any>(`/bookings/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    }),
+  get: async (id: string) => {
+    const bookings = await firestoreBookings.list();
+    return bookings.find(b => b.id === id) || null;
+  },
+
+  update: async (id: string, data: { status?: string; payment_status?: string }) => {
+    if (data.status) await firestoreBookings.updateStatus(id, data.status);
+    return { id, ...data };
+  },
 };
 
-// Guests
+// Guests — powered by Firestore
 export const guestsApi = {
-  list: (params?: { status?: string; search?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.search) searchParams.set('search', params.search);
-    const query = searchParams.toString();
-    return request<any[]>(`/guests${query ? '?' + query : ''}`);
+  list: (params?: { status?: string; search?: string }) =>
+    firestoreGuests.list(params) as Promise<any[]>,
+
+  stats: () => firestoreGuests.stats(),
+
+  update: async (id: string, data: { status: string }) => {
+    await firestoreGuests.updateStatus(id, data.status);
+    return { id, ...data };
   },
-
-  stats: () => request<{
-    checkedIn: number;
-    upcoming: number;
-    checkingOut: number;
-    completed: number;
-    total: number;
-  }>('/guests/stats'),
-
-  update: (id: string, data: { status: string }) =>
-    request<any>(`/guests/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    }),
 };
 
-// Invoices
+// Invoices — still uses Express backend
 export const invoicesApi = {
   list: (params?: { status?: string }) => {
     const query = params?.status ? `?status=${params.status}` : '';
@@ -134,12 +132,12 @@ export const invoicesApi = {
     }),
 };
 
-// Reports
+// Reports — still uses Express backend
 export const reportsApi = {
   get: () => request<any>('/reports'),
 };
 
-// Properties
+// Properties — still uses Express backend
 export const propertiesApi = {
   list: () => request<any[]>('/properties'),
   get: (id: string) => request<any>(`/properties/${id}`),
@@ -147,7 +145,7 @@ export const propertiesApi = {
     request<{ available: boolean }>(`/properties/${id}/availability?check_in=${checkIn}&check_out=${checkOut}`),
 };
 
-// Transactions
+// Transactions — powered by Firestore
 export const transactionsApi = {
-  list: (limit?: number) => request<any[]>(`/transactions${limit ? '?limit=' + limit : ''}`),
+  list: (limit?: number) => firestoreTransactions.list(limit) as Promise<any[]>,
 };
