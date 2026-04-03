@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, Hourglass, FileText, Receipt, Maximize, Send } from 'lucide-react';
+import { CheckCircle2, Hourglass, FileText, Receipt, Maximize, Send, Download, MessageCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { invoicesApi } from '../services/api';
+import { downloadInvoicePDF, shareInvoiceViaWhatsApp } from '../services/pdf';
 import type { Invoice } from '../types';
 
 export const Invoices: React.FC = () => {
@@ -10,6 +11,8 @@ export const Invoices: React.FC = () => {
   const [stats, setStats] = useState({ outstanding: 0, healthRate: 0, awaitingAction: 0 });
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const [whatsAppPhone, setWhatsAppPhone] = useState('');
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -218,13 +221,56 @@ export const Invoices: React.FC = () => {
               </table>
             </div>
 
-            <div className="p-6 bg-surface-container-high flex gap-3">
-              <button className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors">
-                Download PDF
-              </button>
+            <div className="p-6 bg-surface-container-high space-y-3">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => previewInvoice && downloadInvoicePDF(previewInvoice)}
+                  className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
+                >
+                  <Download size={14} />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => setShowWhatsApp(!showWhatsApp)}
+                  className="flex-1 border border-emerald-300 bg-emerald-50 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle size={14} />
+                  Share via WhatsApp
+                </button>
+              </div>
+
+              {showWhatsApp && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="flex gap-2"
+                >
+                  <div className="bg-white rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60 border border-primary-navy/10">+968</div>
+                  <input
+                    type="text"
+                    value={whatsAppPhone}
+                    onChange={(e) => setWhatsAppPhone(e.target.value.replace(/[^\d]/g, ''))}
+                    placeholder="Guest phone number"
+                    maxLength={8}
+                    className="flex-1 bg-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/30"
+                  />
+                  <button
+                    onClick={() => {
+                      if (previewInvoice && whatsAppPhone.length === 8) {
+                        shareInvoiceViaWhatsApp(previewInvoice, `968${whatsAppPhone}`);
+                      }
+                    }}
+                    disabled={whatsAppPhone.length !== 8}
+                    className="px-5 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </motion.div>
+              )}
+
               <button
                 onClick={() => previewInvoice && handleApprove(previewInvoice.id)}
-                className="flex-1 bg-primary-navy py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white shadow-lg shadow-primary-navy/20 flex items-center justify-center gap-2"
+                className="w-full bg-primary-navy py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white shadow-lg shadow-primary-navy/20 flex items-center justify-center gap-2"
               >
                 <Send size={14} />
                 Approve & Send

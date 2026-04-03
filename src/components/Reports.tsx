@@ -7,9 +7,10 @@ import {
   Star,
   Download,
   Calendar as CalendarIcon,
+  MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { reportsApi } from '../services/api';
+import { reportsApi, testimonialsApi } from '../services/api';
 
 interface ReportData {
   stats: {
@@ -23,16 +24,40 @@ interface ReportData {
   reviews: { name: string; stay: string; text: string; rating: number }[];
 }
 
+interface FirestoreTestimonial {
+  id?: string;
+  guest_name: string;
+  guest_phone: string;
+  property_name: string;
+  rating: number;
+  text: string;
+  stay_details: string;
+  created_at: string;
+}
+
 export const Reports: React.FC = () => {
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [liveTestimonials, setLiveTestimonials] = useState<FirestoreTestimonial[]>([]);
 
   useEffect(() => {
-    reportsApi.get()
-      .then(setData)
-      .catch(console.error)
+    Promise.all([
+      reportsApi.get(),
+      testimonialsApi.list(),
+    ]).then(([reportData, testimonials]) => {
+      setData(reportData);
+      setLiveTestimonials(testimonials);
+    }).catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const handleWhatsAppReply = (phone: string, name: string) => {
+    const cleanPhone = phone.replace(/[\s+]/g, '');
+    const message = encodeURIComponent(
+      `Dear ${name},\n\nThank you for your wonderful review of Al-Nakheel! We truly appreciate your feedback and look forward to welcoming you again.\n\nWarm regards,\nAl-Nakheel Luxury Properties`
+    );
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+  };
 
   if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
   if (!data) return null;
@@ -164,18 +189,18 @@ export const Reports: React.FC = () => {
         </motion.div>
       </div>
 
-      {/* Feedback Section */}
+      {/* Feedback Section — Live Testimonials from Firestore */}
       <section className="space-y-6">
         <div className="flex items-center justify-between">
           <h4 className="text-2xl font-bold font-headline text-primary-navy">Customer Sentiment</h4>
-          <button className="text-secondary-gold text-xs font-bold uppercase tracking-wider border-b-2 border-secondary-gold/30 pb-1 hover:border-secondary-gold transition-all">
-            All Reviews
-          </button>
+          <span className="text-primary-navy/40 text-xs font-bold uppercase tracking-wider">
+            {liveTestimonials.length > 0 ? `${liveTestimonials.length} live reviews` : `${data.reviews.length} reviews`}
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {data.reviews.map((review, i) => (
+          {(liveTestimonials.length > 0 ? liveTestimonials : data.reviews.map(r => ({ ...r, guest_name: r.name, guest_phone: '', property_name: '', stay_details: r.stay, created_at: '' }))).map((review, i) => (
             <motion.div
-              key={review.name}
+              key={review.guest_name + i}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.1 }}
@@ -183,18 +208,31 @@ export const Reports: React.FC = () => {
             >
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-primary-navy/10 flex items-center justify-center overflow-hidden">
-                  <img src={`https://i.pravatar.cc/150?u=${review.name}`} alt={review.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={`https://i.pravatar.cc/150?u=${review.guest_name}`} alt={review.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
-                <div>
-                  <h6 className="text-sm font-bold">{review.name}</h6>
-                  <p className="text-[10px] text-primary-navy/50 font-medium">{review.stay}</p>
+                <div className="flex-1 min-w-0">
+                  <h6 className="text-sm font-bold truncate">{review.guest_name}</h6>
+                  <p className="text-[10px] text-primary-navy/50 font-medium">
+                    {review.property_name && `${review.property_name} \u2022 `}{review.stay_details}
+                  </p>
                 </div>
               </div>
               <p className="text-sm italic text-primary-navy/80 leading-relaxed">"{review.text}"</p>
-              <div className="flex text-secondary-gold">
-                {Array.from({ length: 5 }).map((_, j) => (
-                  <Star key={j} size={12} fill={j < review.rating ? 'currentColor' : 'none'} />
-                ))}
+              <div className="flex items-center justify-between">
+                <div className="flex text-secondary-gold">
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <Star key={j} size={12} fill={j < review.rating ? 'currentColor' : 'none'} />
+                  ))}
+                </div>
+                {review.guest_phone && (
+                  <button
+                    onClick={() => handleWhatsAppReply(review.guest_phone, review.guest_name)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-100 transition-colors"
+                  >
+                    <MessageCircle size={12} />
+                    Reply
+                  </button>
+                )}
               </div>
             </motion.div>
           ))}

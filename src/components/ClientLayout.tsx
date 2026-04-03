@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import { Home, Calendar as CalendarIcon, LogIn, LogOut, ShieldCheck } from 'lucide-react';
+import { Home, Calendar as CalendarIcon, LogIn, LogOut, ShieldCheck, Star } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,6 +12,7 @@ export const ClientLayout: React.FC = () => {
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/booking', label: 'Bookings', icon: CalendarIcon },
+    { path: '/testimonials', label: 'Reviews', icon: Star },
   ];
 
   const isActive = (path: string) => {

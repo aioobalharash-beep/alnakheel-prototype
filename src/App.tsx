@@ -11,6 +11,7 @@ import { Sanctuary } from './components/Sanctuary';
 import { Booking } from './components/Booking';
 import { Confirmation } from './components/Confirmation';
 import { Login } from './components/Login';
+import { Testimonials } from './components/Testimonials';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -41,6 +42,7 @@ function AppRoutes() {
       <Route path="/" element={<ClientLayout />}>
         <Route index element={<Sanctuary />} />
         <Route path="booking" element={<Booking />} />
+        <Route path="testimonials" element={<Testimonials />} />
         <Route path="confirmation" element={<Confirmation />} />
       </Route>
 

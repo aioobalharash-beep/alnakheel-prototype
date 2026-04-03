@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Search, MoreVertical, Calendar as CalendarIcon, MessageSquare, Phone, CheckCircle2, UserPlus } from 'lucide-react';
+import { Search, MoreVertical, Calendar as CalendarIcon, MessageSquare, Phone, CheckCircle2, UserPlus, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { guestsApi } from '../services/api';
-import type { Guest } from '../types';
+import { guestsApi, propertiesApi } from '../services/api';
+import type { Guest, Property } from '../types';
 
 export const Guests: React.FC = () => {
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -11,6 +11,11 @@ export const Guests: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+  const [addSubmitting, setAddSubmitting] = useState(false);
 
   const loadData = () => {
     const params: { status?: string; search?: string } = {};
@@ -28,6 +33,41 @@ export const Guests: React.FC = () => {
   };
 
   useEffect(() => { loadData(); }, [activeFilter, searchQuery]);
+
+  useEffect(() => {
+    propertiesApi.list().then(setProperties).catch(console.error);
+  }, []);
+
+  const handleAddGuest = async () => {
+    const errs: Record<string, string> = {};
+    if (!addForm.name.trim()) errs.name = 'Name is required';
+    if (!addForm.phone.trim()) errs.phone = 'Phone is required';
+    if (!addForm.check_in) errs.check_in = 'Check-in date is required';
+    if (!addForm.check_out) errs.check_out = 'Check-out date is required';
+    if (!addForm.property_id) errs.property_id = 'Property is required';
+    setAddErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setAddSubmitting(true);
+    try {
+      await guestsApi.create({
+        name: addForm.name.trim(),
+        phone: `+968${addForm.phone.replace(/\s/g, '')}`,
+        email: addForm.email || undefined,
+        check_in: addForm.check_in,
+        check_out: addForm.check_out,
+        property_id: addForm.property_id,
+        property_name: addForm.property_name,
+      });
+      setShowAddModal(false);
+      setAddForm({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
+      loadData();
+    } catch (err) {
+      console.error('Failed to add guest:', err);
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
 
   const handleStatusChange = async (guestId: string, newStatus: string) => {
     try {
@@ -195,9 +235,136 @@ export const Guests: React.FC = () => {
         )}
       </section>
 
-      <button className="fixed bottom-24 right-6 w-14 h-14 bg-secondary-gold text-primary-navy rounded-full shadow-lg shadow-secondary-gold/20 flex items-center justify-center active:scale-95 transition-all z-40">
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-24 right-6 w-14 h-14 bg-secondary-gold text-primary-navy rounded-full shadow-lg shadow-secondary-gold/20 flex items-center justify-center active:scale-95 transition-all z-40"
+      >
         <UserPlus size={24} />
       </button>
+
+      {/* Add Guest Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[24px] w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl"
+          >
+            <div className="flex items-center justify-between p-6 border-b border-primary-navy/5">
+              <div>
+                <h3 className="font-headline text-lg font-bold text-primary-navy">Add Walk-in Guest</h3>
+                <p className="text-xs text-primary-navy/50 font-medium">Manual guest entry for walk-in bookings</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-primary-navy/5 rounded-full">
+                <X size={20} className="text-primary-navy/40" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Full Name *</label>
+                <input
+                  type="text"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Ahmed Al-Said"
+                  className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20", addErrors.name ? "border-red-300" : "border-transparent")}
+                />
+                {addErrors.name && <p className="text-red-500 text-xs">{addErrors.name}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone *</label>
+                <div className="flex gap-2">
+                  <div className="bg-surface-container-low rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60">+968</div>
+                  <input
+                    type="text"
+                    value={addForm.phone}
+                    onChange={(e) => setAddForm(p => ({ ...p, phone: e.target.value.replace(/[^\d\s]/g, '') }))}
+                    placeholder="9000 0000"
+                    maxLength={9}
+                    className={cn("flex-1 bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20", addErrors.phone ? "border-red-300" : "border-transparent")}
+                  />
+                </div>
+                {addErrors.phone && <p className="text-red-500 text-xs">{addErrors.phone}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Email (Optional)</label>
+                <input
+                  type="email"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm(p => ({ ...p, email: e.target.value }))}
+                  placeholder="guest@email.com"
+                  className="w-full bg-surface-container-low border border-transparent rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Property *</label>
+                <select
+                  value={addForm.property_id}
+                  onChange={(e) => {
+                    const prop = properties.find(p => p.id === e.target.value);
+                    setAddForm(p => ({ ...p, property_id: e.target.value, property_name: prop?.name || '' }));
+                  }}
+                  className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", addErrors.property_id ? "border-red-300" : "border-transparent")}
+                >
+                  <option value="">Select property...</option>
+                  {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {addErrors.property_id && <p className="text-red-500 text-xs">{addErrors.property_id}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Check-in *</label>
+                  <input
+                    type="date"
+                    value={addForm.check_in}
+                    onChange={(e) => setAddForm(p => ({ ...p, check_in: e.target.value }))}
+                    className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", addErrors.check_in ? "border-red-300" : "border-transparent")}
+                  />
+                  {addErrors.check_in && <p className="text-red-500 text-xs">{addErrors.check_in}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Check-out *</label>
+                  <input
+                    type="date"
+                    value={addForm.check_out}
+                    onChange={(e) => setAddForm(p => ({ ...p, check_out: e.target.value }))}
+                    className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", addErrors.check_out ? "border-red-300" : "border-transparent")}
+                  />
+                  {addErrors.check_out && <p className="text-red-500 text-xs">{addErrors.check_out}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-primary-navy/5 flex gap-3">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddGuest}
+                disabled={addSubmitting}
+                className="flex-1 py-3 rounded-xl bg-primary-navy text-white font-bold text-xs uppercase tracking-widest shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {addSubmitting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <UserPlus size={14} />
+                    Add Guest
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

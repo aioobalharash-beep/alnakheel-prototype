@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import type { Property } from '../types';
@@ -17,6 +17,9 @@ export const Booking: React.FC = () => {
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [selectedDates, setSelectedDates] = useState<{ start: number | null; end: number | null }>({ start: null, end: null });
+  const [paymentMethod, setPaymentMethod] = useState<'thawani' | 'bank_transfer'>('thawani');
+  const [receiptImage, setReceiptImage] = useState<string>('');
+  const [receiptFileName, setReceiptFileName] = useState('');
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -88,8 +91,24 @@ export const Booking: React.FC = () => {
       newErrors.dates = 'Please select check-in and check-out dates';
     }
 
+    if (paymentMethod === 'bank_transfer' && !receiptImage) {
+      newErrors.receipt = 'Please upload your bank transfer receipt';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReceiptFileName(file.name);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReceiptImage(reader.result as string);
+      setErrors(prev => ({ ...prev, receipt: '' }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async () => {
@@ -112,6 +131,8 @@ export const Booking: React.FC = () => {
         check_out: checkOut,
         nightly_rate: property.nightly_rate,
         security_deposit: property.security_deposit,
+        payment_method: paymentMethod,
+        receipt_image: paymentMethod === 'bank_transfer' ? receiptImage : undefined,
       });
 
       navigate('/confirmation', {
@@ -319,6 +340,101 @@ export const Booking: React.FC = () => {
         </div>
       </section>
 
+      {/* Payment Method Selection */}
+      {nights > 0 && (
+        <section className="space-y-4">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Payment Method *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('thawani')}
+              className={cn(
+                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                paymentMethod === 'thawani'
+                  ? "border-primary-navy bg-primary-navy/5"
+                  : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+              )}
+            >
+              {paymentMethod === 'thawani' && (
+                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+              )}
+              <CreditCard size={22} className={paymentMethod === 'thawani' ? "text-primary-navy" : "text-primary-navy/40"} />
+              <p className="text-sm font-bold text-primary-navy">Thawani</p>
+              <p className="text-[10px] text-primary-navy/50 font-medium">Instant online payment</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('bank_transfer')}
+              className={cn(
+                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                paymentMethod === 'bank_transfer'
+                  ? "border-primary-navy bg-primary-navy/5"
+                  : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+              )}
+            >
+              {paymentMethod === 'bank_transfer' && (
+                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+              )}
+              <Building2 size={22} className={paymentMethod === 'bank_transfer' ? "text-primary-navy" : "text-primary-navy/40"} />
+              <p className="text-sm font-bold text-primary-navy">Bank Transfer</p>
+              <p className="text-[10px] text-primary-navy/50 font-medium">Upload receipt for approval</p>
+            </button>
+          </div>
+
+          {/* Bank Transfer Details & Receipt Upload */}
+          {paymentMethod === 'bank_transfer' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-4"
+            >
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-amber-800">Bank Transfer Details</p>
+                <div className="text-xs text-amber-700 space-y-1">
+                  <p><span className="font-bold">Bank:</span> Bank Muscat</p>
+                  <p><span className="font-bold">Account:</span> Al-Nakheel Luxury Properties LLC</p>
+                  <p><span className="font-bold">IBAN:</span> OM12 0123 0000 0012 3456 789</p>
+                  <p><span className="font-bold">Reference:</span> Your phone number</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Upload Transfer Receipt *</label>
+                <label
+                  className={cn(
+                    "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                    receiptImage
+                      ? "border-emerald-300 bg-emerald-50"
+                      : errors.receipt ? "border-red-300 bg-red-50/50" : "border-primary-navy/20 bg-surface-container-low hover:border-primary-navy/40"
+                  )}
+                >
+                  {receiptImage ? (
+                    <div className="text-center space-y-1">
+                      <Check size={24} className="mx-auto text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-700">Receipt uploaded</p>
+                      <p className="text-[10px] text-emerald-600">{receiptFileName}</p>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-1">
+                      <Upload size={24} className="mx-auto text-primary-navy/30" />
+                      <p className="text-xs font-bold text-primary-navy/50">Tap to upload receipt</p>
+                      <p className="text-[10px] text-primary-navy/30">JPG, PNG or PDF</p>
+                    </div>
+                  )}
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleReceiptUpload} />
+                </label>
+                {errors.receipt && <p className="text-red-500 text-xs font-medium">{errors.receipt}</p>}
+              </div>
+            </motion.div>
+          )}
+        </section>
+      )}
+
       <div className="space-y-4 pt-4">
         <button
           onClick={handleSubmit}
@@ -327,6 +443,11 @@ export const Booking: React.FC = () => {
         >
           {submitting ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : paymentMethod === 'bank_transfer' ? (
+            <>
+              Submit Booking
+              <span className="text-[10px] opacity-40 lowercase font-normal">(pending approval)</span>
+            </>
           ) : (
             <>
               Proceed to Secure Payment
@@ -337,7 +458,9 @@ export const Booking: React.FC = () => {
         <div className="flex items-center justify-center gap-2 text-primary-navy/30">
           <ShieldCheck size={14} />
           <p className="text-[9px] font-bold text-center uppercase tracking-wider max-w-[200px]">
-            Your transaction is encrypted and secured by Thawani Gateway
+            {paymentMethod === 'bank_transfer'
+              ? 'Your booking will be confirmed once the admin approves your transfer'
+              : 'Your transaction is encrypted and secured by Thawani Gateway'}
           </p>
         </div>
       </div>

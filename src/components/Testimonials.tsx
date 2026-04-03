@@ -1,0 +1,268 @@
+import React, { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
+import { Star, Send, ArrowLeft, MessageSquare } from 'lucide-react';
+import { cn } from '@/src/lib/utils';
+import { testimonialsApi, propertiesApi } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+
+interface Testimonial {
+  id?: string;
+  guest_name: string;
+  guest_phone: string;
+  property_name: string;
+  rating: number;
+  text: string;
+  stay_details: string;
+  created_at: string;
+}
+
+export const Testimonials: React.FC = () => {
+  const navigate = useNavigate();
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
+
+  const [form, setForm] = useState({
+    guest_name: '',
+    guest_phone: '',
+    property_name: '',
+    rating: 0,
+    text: '',
+    stay_details: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    Promise.all([
+      testimonialsApi.list(),
+      propertiesApi.list(),
+    ]).then(([t, p]) => {
+      setTestimonials(t);
+      setProperties(p);
+    }).catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmit = async () => {
+    const errs: Record<string, string> = {};
+    if (!form.guest_name.trim()) errs.guest_name = 'Name is required';
+    if (!form.guest_phone.trim()) errs.guest_phone = 'Phone is required';
+    if (!form.property_name) errs.property_name = 'Please select a property';
+    if (form.rating === 0) errs.rating = 'Please select a rating';
+    if (!form.text.trim()) errs.text = 'Please share your experience';
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      const newT = await testimonialsApi.create({
+        ...form,
+        guest_phone: `+968${form.guest_phone.replace(/\s/g, '')}`,
+        stay_details: form.stay_details || 'Recent Stay',
+      });
+      setTestimonials(prev => [newT as Testimonial, ...prev]);
+      setSubmitted(true);
+      setShowForm(false);
+      setForm({ guest_name: '', guest_phone: '', property_name: '', rating: 0, text: '', stay_details: '' });
+    } catch (err) {
+      console.error('Failed to submit:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-10 max-w-lg mx-auto">
+      <button
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
+      >
+        <ArrowLeft size={18} />
+        Back to Home
+      </button>
+
+      <section className="text-center space-y-2">
+        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Guest Reviews</span>
+        <h2 className="font-headline text-4xl font-bold text-primary-navy">Share Your Experience</h2>
+        <p className="text-primary-navy/60 text-sm max-w-xs mx-auto">
+          Your feedback helps us craft the perfect desert retreat experience at Al-Nakheel.
+        </p>
+      </section>
+
+      {submitted && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-emerald-50 text-emerald-700 p-4 rounded-xl text-sm font-medium text-center"
+        >
+          Thank you for your review! Your feedback means the world to us.
+        </motion.div>
+      )}
+
+      {!showForm ? (
+        <button
+          onClick={() => { setShowForm(true); setSubmitted(false); }}
+          className="w-full bg-primary-navy text-white py-4 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        >
+          <MessageSquare size={18} />
+          Write a Review
+        </button>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-[24px] p-6 shadow-sm border border-primary-navy/5 space-y-5"
+        >
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Your Name *</label>
+            <input
+              type="text"
+              value={form.guest_name}
+              onChange={(e) => setForm(p => ({ ...p, guest_name: e.target.value }))}
+              placeholder="e.g. Ahmed Al-Said"
+              className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20", errors.guest_name ? "border-red-300" : "border-transparent")}
+            />
+            {errors.guest_name && <p className="text-red-500 text-xs">{errors.guest_name}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone *</label>
+            <div className="flex gap-2">
+              <div className="bg-surface-container-low rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60">+968</div>
+              <input
+                type="text"
+                value={form.guest_phone}
+                onChange={(e) => setForm(p => ({ ...p, guest_phone: e.target.value.replace(/[^\d\s]/g, '') }))}
+                placeholder="9000 0000"
+                maxLength={9}
+                className={cn("flex-1 bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20", errors.guest_phone ? "border-red-300" : "border-transparent")}
+              />
+            </div>
+            {errors.guest_phone && <p className="text-red-500 text-xs">{errors.guest_phone}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Property *</label>
+            <select
+              value={form.property_name}
+              onChange={(e) => setForm(p => ({ ...p, property_name: e.target.value }))}
+              className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", errors.property_name ? "border-red-300" : "border-transparent")}
+            >
+              <option value="">Select property...</option>
+              {properties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+            {errors.property_name && <p className="text-red-500 text-xs">{errors.property_name}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Stay Period</label>
+            <input
+              type="text"
+              value={form.stay_details}
+              onChange={(e) => setForm(p => ({ ...p, stay_details: e.target.value }))}
+              placeholder="e.g. March 2026, 3 nights"
+              className="w-full bg-surface-container-low border border-transparent rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Rating *</label>
+            <div className="flex gap-2 py-2">
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => { setForm(p => ({ ...p, rating: star })); setErrors(prev => ({ ...prev, rating: '' })); }}
+                  className="transition-transform hover:scale-110 active:scale-95"
+                >
+                  <Star
+                    size={32}
+                    className={star <= form.rating ? "text-secondary-gold" : "text-primary-navy/15"}
+                    fill={star <= form.rating ? "currentColor" : "none"}
+                  />
+                </button>
+              ))}
+            </div>
+            {errors.rating && <p className="text-red-500 text-xs">{errors.rating}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Your Review *</label>
+            <textarea
+              value={form.text}
+              onChange={(e) => setForm(p => ({ ...p, text: e.target.value }))}
+              placeholder="Tell us about your stay at Al-Nakheel..."
+              rows={4}
+              className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20 resize-none", errors.text ? "border-red-300" : "border-transparent")}
+            />
+            {errors.text && <p className="text-red-500 text-xs">{errors.text}</p>}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex-1 py-3 rounded-xl bg-primary-navy text-white font-bold text-xs uppercase tracking-widest shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Send size={14} />
+                  Submit Review
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Existing Testimonials */}
+      <section className="space-y-4">
+        <h3 className="font-headline text-xl font-bold text-primary-navy">What Our Guests Say</h3>
+        {loading ? (
+          <div className="space-y-4 animate-pulse">
+            {[1, 2].map(i => <div key={i} className="h-40 bg-primary-navy/5 rounded-xl" />)}
+          </div>
+        ) : testimonials.length === 0 ? (
+          <p className="text-center text-sm text-primary-navy/40 py-8">Be the first to share your experience!</p>
+        ) : (
+          testimonials.map((t, i) => (
+            <motion.div
+              key={t.id || i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="bg-white p-6 rounded-[20px] border-l-4 border-secondary-gold shadow-sm space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary-navy/10 flex items-center justify-center overflow-hidden">
+                  <img src={`https://i.pravatar.cc/150?u=${t.guest_name}`} alt={t.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-primary-navy">{t.guest_name}</h4>
+                  <p className="text-[10px] text-primary-navy/50 font-medium">{t.property_name} {t.stay_details && `\u2022 ${t.stay_details}`}</p>
+                </div>
+              </div>
+              <p className="text-sm italic text-primary-navy/80 leading-relaxed">"{t.text}"</p>
+              <div className="flex text-secondary-gold">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <Star key={j} size={12} fill={j < t.rating ? 'currentColor' : 'none'} />
+                ))}
+              </div>
+            </motion.div>
+          ))
+        )}
+      </section>
+    </div>
+  );
+};
