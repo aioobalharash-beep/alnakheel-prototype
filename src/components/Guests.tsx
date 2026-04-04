@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Search, MoreVertical, Calendar as CalendarIcon, MessageSquare, Phone, CheckCircle2, UserPlus, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { useSearchParams } from 'react-router-dom';
 import { guestsApi, propertiesApi } from '../services/api';
 import type { Guest, Property } from '../types';
 
 export const Guests: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightName = searchParams.get('highlight');
+  const highlightedRef = useRef<HTMLDivElement>(null);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [stats, setStats] = useState({ checkedIn: 0, upcoming: 0, checkingOut: 0, completed: 0, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,18 @@ export const Guests: React.FC = () => {
   useEffect(() => {
     propertiesApi.list().then(setProperties).catch(console.error);
   }, []);
+
+  // Scroll to highlighted guest when data loads
+  useEffect(() => {
+    if (!loading && highlightName && highlightedRef.current) {
+      highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Clear the highlight param after 3 seconds so the ring fades
+      const timer = setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, highlightName, guests]);
 
   const handleAddGuest = async () => {
     const errs: Record<string, string> = {};
@@ -145,13 +161,19 @@ export const Guests: React.FC = () => {
         ) : guests.length === 0 ? (
           <p className="text-center text-sm text-primary-navy/40 py-12">No guests found</p>
         ) : (
-          guests.map((guest, i) => (
+          guests.map((guest, i) => {
+            const isHighlighted = highlightName && guest.name.toLowerCase() === highlightName.toLowerCase();
+            return (
             <motion.div
               key={guest.id}
+              ref={isHighlighted ? highlightedRef : undefined}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="bg-white p-5 rounded-xl shadow-sm border border-primary-navy/5 space-y-4"
+              className={cn(
+                "bg-white p-5 rounded-xl shadow-sm border space-y-4 transition-all duration-500",
+                isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" : "border-primary-navy/5"
+              )}
             >
               <div className="flex justify-between items-start">
                 <div className="flex gap-3">
@@ -231,7 +253,7 @@ export const Guests: React.FC = () => {
                 )}
               </div>
             </motion.div>
-          ))
+          );})
         )}
       </section>
 

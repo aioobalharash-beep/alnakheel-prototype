@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Bed, Banknote, Star, ChevronLeft, ChevronRight, User, X } from 'lucide-react';
+import { Bed, Banknote, Star, ChevronLeft, ChevronRight, User, X, ArrowRight, Clock, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { dashboardApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -31,6 +32,7 @@ interface RealtimeBooking {
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -308,53 +310,149 @@ export const Dashboard: React.FC = () => {
           )}
         </motion.section>
 
-        {/* Next Check-In */}
-        <motion.section
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5 }}
-          className="space-y-4"
-        >
-          <h3 className="text-xl font-bold font-headline">Next Check-In</h3>
-          {data.nextCheckIn ? (
-            <div className="relative group overflow-hidden rounded-2xl h-56 shadow-lg">
-              <img
-                src="https://picsum.photos/seed/oman-villa/800/600"
-                alt="Luxury villa"
-                className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-transform duration-700"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 p-6 flex flex-col justify-end">
-                <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-primary-navy">{data.nextCheckIn.property_name}</h4>
-                      <p className="text-xs text-primary-navy/60">Guest: {data.nextCheckIn.guest_name}</p>
+        {/* Right column: Next Check-In + Recent Activity */}
+        <div className="space-y-4">
+          {/* Next Check-In Widget */}
+          <motion.section
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            {(() => {
+              const todayStr = new Date().toISOString().split('T')[0];
+              const nextCheckIn = bookings
+                .filter(b => b.status !== 'cancelled' && b.check_in >= todayStr)
+                .sort((a, b) => a.check_in.localeCompare(b.check_in))[0];
+
+              if (!nextCheckIn) {
+                return (
+                  <div className="bg-white rounded-2xl border border-primary-navy/5 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Clock size={16} className="text-secondary-gold" />
+                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">Next Check-In</h3>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-secondary-gold">{new Date(data.nextCheckIn.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-                      <p className="text-[10px] uppercase font-bold text-primary-navy/40">Arrival</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex -space-x-2">
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-primary-navy/10 flex items-center justify-center">
-                        <User size={14} />
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 rounded-full bg-primary-navy/5 mx-auto mb-3 flex items-center justify-center">
+                        <User size={20} className="text-primary-navy/30" />
                       </div>
+                      <p className="text-sm text-primary-navy/40 font-medium">No upcoming check-ins</p>
                     </div>
-                    <button className="bg-primary-navy text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all">
-                      View Details
-                    </button>
                   </div>
+                );
+              }
+
+              const arrivalDate = new Date(nextCheckIn.check_in);
+              const isConfirmed = nextCheckIn.status === 'confirmed' || nextCheckIn.status === 'checked-in';
+
+              return (
+                <div className="bg-white rounded-2xl border border-primary-navy/5 p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-secondary-gold" />
+                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">Next Check-In</h3>
+                    </div>
+                    <span className={cn(
+                      "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full",
+                      isConfirmed ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                    )}>
+                      {nextCheckIn.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-full overflow-hidden bg-primary-navy/5 flex-shrink-0">
+                      <img src={`https://i.pravatar.cc/150?u=${nextCheckIn.guest_name}`} alt={nextCheckIn.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-primary-navy text-sm truncate">{nextCheckIn.guest_name}</p>
+                      <p className="text-[11px] text-primary-navy/50 font-medium">
+                        {arrivalDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {' '}&bull;{' '}{nextCheckIn.property_name}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-bold text-secondary-gold text-lg font-headline">
+                        {arrivalDate.toLocaleDateString('en-GB', { day: 'numeric' })}
+                      </p>
+                      <p className="text-[9px] uppercase font-bold text-primary-navy/40 tracking-wider">
+                        {arrivalDate.toLocaleDateString('en-GB', { month: 'short' })}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/guests?highlight=${encodeURIComponent(nextCheckIn.guest_name)}`)}
+                    className="mt-4 w-full flex items-center justify-center gap-2 bg-primary-navy text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
+                  >
+                    View Details
+                    <ArrowRight size={12} />
+                  </button>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white p-8 rounded-2xl text-center text-primary-navy/40">
-              <p className="text-sm">No upcoming check-ins</p>
-            </div>
-          )}
-        </motion.section>
+              );
+            })()}
+          </motion.section>
+
+          {/* Recent Activity Widget */}
+          <motion.section
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            {(() => {
+              // Most recently created booking (bookings are already sorted by created_at DESC from onSnapshot)
+              const recentBooking = bookings.filter(b => b.status !== 'cancelled')[0];
+
+              if (!recentBooking) {
+                return (
+                  <div className="bg-primary-navy rounded-2xl p-6 shadow-lg">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sparkles size={16} className="text-secondary-gold" />
+                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">Recent Activity</h3>
+                    </div>
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 rounded-full bg-white/10 mx-auto mb-3 flex items-center justify-center">
+                        <Sparkles size={20} className="text-white/30" />
+                      </div>
+                      <p className="text-sm text-white/40 font-medium">No recent activity</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="bg-primary-navy rounded-2xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className="text-secondary-gold" />
+                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">Recent Activity</h3>
+                    </div>
+                    <span className="bg-secondary-gold/20 text-secondary-gold px-2.5 py-1 rounded-full text-[9px] font-bold uppercase">New</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+                      <img src={`https://i.pravatar.cc/150?u=${recentBooking.guest_name}`} alt={recentBooking.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-white text-sm truncate">New Booking from {recentBooking.guest_name}</p>
+                      <p className="text-[11px] text-white/50 font-medium">
+                        {recentBooking.property_name} &bull; {recentBooking.nights} night{recentBooking.nights > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between bg-white/5 rounded-xl px-4 py-2.5">
+                    <span className="text-white/50 text-[10px] font-bold uppercase tracking-wider">Amount</span>
+                    <span className="text-secondary-gold font-bold font-headline">OMR {recentBooking.total_amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/guests?highlight=${encodeURIComponent(recentBooking.guest_name)}`)}
+                    className="mt-3 w-full flex items-center justify-center gap-2 bg-secondary-gold text-primary-navy py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
+                  >
+                    View Details
+                    <ArrowRight size={12} />
+                  </button>
+                </div>
+              );
+            })()}
+          </motion.section>
+        </div>
       </div>
     </div>
   );
@@ -372,7 +470,10 @@ function DashboardSkeleton() {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="h-72 bg-primary-navy/5 rounded-3xl" />
-        <div className="h-56 bg-primary-navy/5 rounded-2xl" />
+        <div className="space-y-4">
+          <div className="h-44 bg-primary-navy/5 rounded-2xl" />
+          <div className="h-44 bg-primary-navy/10 rounded-2xl" />
+        </div>
       </div>
     </div>
   );
