@@ -1,9 +1,5 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ClientLayout } from './components/ClientLayout';
 import { Dashboard } from './components/Dashboard';
@@ -14,65 +10,66 @@ import { Reports } from './components/Reports';
 import { Sanctuary } from './components/Sanctuary';
 import { Booking } from './components/Booking';
 import { Confirmation } from './components/Confirmation';
-import { View, Mode, BookingData } from './types';
+import { Login } from './components/Login';
+import { Testimonials } from './components/Testimonials';
 
-export default function App() {
-  const [mode, setMode] = useState<Mode>('client');
-  const [currentView, setCurrentView] = useState<View>('sanctuary');
-  const [bookingData, setBookingData] = useState<BookingData | null>(null);
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (!user || user.role !== 'admin') return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
-  const toggleMode = () => {
-    if (mode === 'client') {
-      setMode('admin');
-      setCurrentView('dashboard');
-    } else {
-      setMode('client');
-      setCurrentView('sanctuary');
-    }
-  };
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-pearl-white flex items-center justify-center">
+      <div className="text-center space-y-4">
+        <h1 className="text-2xl font-bold font-headline text-primary-navy">Al-Nakheel</h1>
+        <div className="w-8 h-8 border-2 border-primary-navy/20 border-t-secondary-gold rounded-full animate-spin mx-auto" />
+      </div>
+    </div>
+  );
+}
 
-  const renderAdminView = () => {
-    switch (currentView) {
-      case 'dashboard': return <Dashboard />;
-      case 'calendar': return <Calendar />;
-      case 'guests': return <Guests />;
-      case 'invoices': return <Invoices />;
-      case 'reports': return <Reports />;
-      default: return <Dashboard />;
-    }
-  };
+function AppRoutes() {
+  const { user, isLoading } = useAuth();
 
-  const renderClientView = () => {
-    switch (currentView) {
-      case 'sanctuary':
-        return <Sanctuary onBookNow={() => setCurrentView('booking')} />;
-      case 'booking':
-        return <Booking onProceed={(data: BookingData) => {
-          setBookingData(data);
-          setCurrentView('confirmation');
-        }} />;
-      case 'confirmation':
-        return <Confirmation bookingData={bookingData} onBack={() => setCurrentView('sanctuary')} />;
-      default:
-        return <Sanctuary onBookNow={() => setCurrentView('booking')} />;
-    }
-  };
-
-  if (mode === 'admin') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
-        {renderAdminView()}
-      </Layout>
-    );
-  }
+  if (isLoading) return <LoadingScreen />;
 
   return (
-    <ClientLayout 
-      currentView={currentView} 
-      onViewChange={setCurrentView}
-      onModeToggle={toggleMode}
-    >
-      {renderClientView()}
-    </ClientLayout>
+    <Routes>
+      {/* Public / Client Routes */}
+      <Route path="/" element={<ClientLayout />}>
+        <Route index element={<Sanctuary />} />
+        <Route path="booking" element={<Booking />} />
+        <Route path="testimonials" element={<Testimonials />} />
+        <Route path="confirmation" element={<Confirmation />} />
+      </Route>
+
+      {/* Auth */}
+      <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/'} replace /> : <Login />} />
+
+      {/* Admin Routes */}
+      <Route path="/admin" element={<AdminRoute><Layout /></AdminRoute>}>
+        <Route index element={<Dashboard />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="guests" element={<Guests />} />
+        <Route path="invoices" element={<Invoices />} />
+        <Route path="reports" element={<Reports />} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

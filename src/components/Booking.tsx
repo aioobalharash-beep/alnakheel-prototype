@@ -1,177 +1,281 @@
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { BookingData } from '@/src/types';
-import { saveBooking } from '@/src/lib/firebase';
+import { propertiesApi, bookingsApi } from '../services/api';
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import type { Property } from '../types';
 
-const NIGHTLY_RATE = 120;
-const SECURITY_DEPOSIT = 50;
+export const Booking: React.FC = () => {
+  const navigate = useNavigate();
+  const [property, setProperty] = useState<Property | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-interface BookingProps {
-  onProceed: (data: BookingData) => void;
-}
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getFirstDayOfWeek(year: number, month: number) {
-  return new Date(year, month, 1).getDay();
-}
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-export const Booking: React.FC<BookingProps> = ({ onProceed }) => {
-  const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [checkIn, setCheckIn] = useState<Date | null>(null);
-  const [checkOut, setCheckOut] = useState<Date | null>(null);
+  // Form state
   const [guestName, setGuestName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [selectedDates, setSelectedDates] = useState<{ start: number | null; end: number | null }>({ start: null, end: null });
+  const [paymentMethod, setPaymentMethod] = useState<'thawani' | 'bank_transfer'>('thawani');
+  const [receiptImage, setReceiptImage] = useState<string>('');
+  const [receiptFileName, setReceiptFileName] = useState('');
 
-  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-  const firstDay = getFirstDayOfWeek(currentYear, currentMonth);
+  // Validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
 
-  const nights = useMemo(() => {
-    if (!checkIn || !checkOut) return 0;
-    const diff = checkOut.getTime() - checkIn.getTime();
-    return Math.round(diff / (1000 * 60 * 60 * 24));
-  }, [checkIn, checkOut]);
+  // Calendar state
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  const stayTotal = nights * NIGHTLY_RATE;
-  const grandTotal = stayTotal + (nights > 0 ? SECURITY_DEPOSIT : 0);
+  // Booked dates from Firestore (real-time)
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
+
+  // Maintenance mode — blocks all bookings when admin toggles off
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  useEffect(() => {
+    propertiesApi.list()
+      .then(properties => {
+        if (properties.length > 0) setProperty(properties[0]);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Real-time listener for existing bookings to prevent double-booking
+  useEffect(() => {
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dates = new Set<string>();
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (data.status === 'cancelled') return;
+
+        const checkIn = new Date(data.check_in);
+        const checkOut = new Date(data.check_out);
+        const cursor = new Date(checkIn);
+        while (cursor <= checkOut) {
+          dates.add(cursor.toISOString().split('T')[0]);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      });
+      setBookedDates(dates);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time listener for property availability status
+  useEffect(() => {
+    const ref = doc(db, 'settings', 'property_status');
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setMaintenanceMode(snap.data().is_live === false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
+
+  const daysInMonth = getDaysInMonth(currentMonth, currentYear);
+  const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
+  const monthName = new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const isDayBooked = (day: number): boolean => {
+    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return bookedDates.has(dateStr);
+  };
 
   const handleDayClick = (day: number) => {
-    const clicked = new Date(currentYear, currentMonth, day);
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (clicked < todayStart) return;
+    const clickedDate = new Date(currentYear, currentMonth, day);
+    if (clickedDate < today) return;
+    if (isDayBooked(day)) return;
 
-    if (!checkIn || (checkIn && checkOut)) {
-      setCheckIn(clicked);
-      setCheckOut(null);
+    if (!selectedDates.start || (selectedDates.start && selectedDates.end)) {
+      setSelectedDates({ start: day, end: null });
     } else {
-      if (clicked <= checkIn) {
-        setCheckIn(clicked);
-        setCheckOut(null);
+      // Check if any day in the range is booked
+      const rangeStart = Math.min(day, selectedDates.start);
+      const rangeEnd = Math.max(day, selectedDates.start);
+      let hasConflict = false;
+      for (let d = rangeStart; d <= rangeEnd; d++) {
+        if (isDayBooked(d)) { hasConflict = true; break; }
+      }
+      if (hasConflict) {
+        setErrors(prev => ({ ...prev, dates: 'Selected range includes unavailable dates' }));
+        setSelectedDates({ start: day, end: null });
+        return;
+      }
+
+      if (day > selectedDates.start) {
+        setSelectedDates({ ...selectedDates, end: day });
       } else {
-        setCheckOut(clicked);
+        setSelectedDates({ start: day, end: selectedDates.start });
       }
     }
+    setErrors(prev => ({ ...prev, dates: '' }));
   };
 
-  const isInRange = (day: number) => {
-    if (!checkIn || !checkOut) return false;
-    const d = new Date(currentYear, currentMonth, day);
-    return d > checkIn && d < checkOut;
+  const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
+  const nightlyRate = property?.nightly_rate || 120;
+  const securityDeposit = property?.security_deposit || 50;
+  const total = (nightlyRate * nights) + securityDeposit;
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!guestName.trim() || guestName.trim().length < 2) {
+      newErrors.name = 'Please enter your full name (at least 2 characters)';
+    }
+
+    const phoneClean = guestPhone.replace(/\s/g, '');
+    if (!phoneClean) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^\d{8}$/.test(phoneClean)) {
+      newErrors.phone = 'Please enter a valid 8-digit Omani phone number';
+    }
+
+    if (guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!selectedDates.start || !selectedDates.end) {
+      newErrors.dates = 'Please select check-in and check-out dates';
+    }
+
+    if (paymentMethod === 'bank_transfer' && !receiptImage) {
+      newErrors.receipt = 'Please upload your bank transfer receipt';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const isCheckIn = (day: number) => {
-    if (!checkIn) return false;
-    const d = new Date(currentYear, currentMonth, day);
-    return d.toDateString() === checkIn.toDateString();
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReceiptFileName(file.name);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReceiptImage(reader.result as string);
+      setErrors(prev => ({ ...prev, receipt: '' }));
+    };
+    reader.readAsDataURL(file);
   };
 
-  const isCheckOut = (day: number) => {
-    if (!checkOut) return false;
-    const d = new Date(currentYear, currentMonth, day);
-    return d.toDateString() === checkOut.toDateString();
-  };
+  const handleSubmit = async () => {
+    if (!validate() || !property || !selectedDates.start || !selectedDates.end) return;
 
-  const isPast = (day: number) => {
-    const d = new Date(currentYear, currentMonth, day);
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return d < todayStart;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const checkIn = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
+    const checkOut = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
+
+    try {
+      const result = await bookingsApi.create({
+        property_id: property.id,
+        property_name: property.name,
+        guest_name: guestName.trim(),
+        guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+        guest_email: guestEmail || undefined,
+        check_in: checkIn,
+        check_out: checkOut,
+        nightly_rate: property.nightly_rate,
+        security_deposit: property.security_deposit,
+        payment_method: paymentMethod,
+        receipt_image: paymentMethod === 'bank_transfer' ? receiptImage : undefined,
+      });
+
+      navigate('/confirmation', {
+        state: {
+          booking: result.booking,
+          propertyName: result.property_name,
+        },
+      });
+    } catch (err: any) {
+      setSubmitError(err.message || 'Booking failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const prevMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
-      setCurrentYear(y => y - 1);
+      setCurrentYear(currentYear - 1);
     } else {
-      setCurrentMonth(m => m - 1);
+      setCurrentMonth(currentMonth - 1);
     }
+    setSelectedDates({ start: null, end: null });
   };
 
   const nextMonth = () => {
     if (currentMonth === 11) {
       setCurrentMonth(0);
-      setCurrentYear(y => y + 1);
+      setCurrentYear(currentYear + 1);
     } else {
-      setCurrentMonth(m => m + 1);
+      setCurrentMonth(currentMonth + 1);
     }
+    setSelectedDates({ start: null, end: null });
   };
 
-  const canGoBack = currentYear > today.getFullYear() || currentMonth > today.getMonth();
-
-  const canSubmit = checkIn && checkOut && nights > 0 && guestName.trim().length > 0 && phone.trim().length >= 4;
-
-  const handleSubmit = async () => {
-    if (!canSubmit || !checkIn || !checkOut) return;
-    setIsLoading(true);
-
-    const bookingData: BookingData = {
-      guestName: guestName.trim(),
-      phone: phone.trim(),
-      checkIn,
-      checkOut,
-      nights,
-      nightlyRate: NIGHTLY_RATE,
-      deposit: SECURITY_DEPOSIT,
-      total: grandTotal,
-    };
-
-    try {
-      await saveBooking(bookingData);
-    } catch (err) {
-      console.error('Failed to save booking:', err);
-    }
-
-    // Small delay for the payment animation feel
-    await new Promise((r) => setTimeout(r, 1500));
-    onProceed(bookingData);
-  };
-
-  const formatDate = (d: Date) =>
-    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
 
   return (
     <div className="p-6 space-y-10 max-w-lg mx-auto">
-      {/* Loading Overlay */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-pearl-white/90 backdrop-blur-md flex flex-col items-center justify-center gap-6"
-          >
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-            >
-              <Loader2 size={48} className="text-secondary-gold" />
-            </motion.div>
-            <div className="text-center space-y-2">
-              <p className="font-headline text-xl font-bold text-primary-navy">Processing Payment</p>
-              <p className="text-primary-navy/50 text-sm">Securing your reservation via Thawani...</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Back Button */}
+      <button
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
+      >
+        <ArrowLeft size={18} />
+        Back to Home
+      </button>
 
       <section className="text-center space-y-2">
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Reservation</span>
         <h2 className="font-headline text-4xl font-bold text-primary-navy">Secure your retreat</h2>
         <p className="text-primary-navy/60 text-sm max-w-xs mx-auto">
-          Select your preferred dates and provide your details to finalize your experience at Al-Nakheel.
+          Select your preferred dates and provide your details to finalize your experience at {property?.name || 'Al-Nakheel'}.
         </p>
       </section>
+
+      {/* Maintenance Mode Banner */}
+      {maintenanceMode && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 rounded-[20px] p-6 text-center space-y-2"
+        >
+          <div className="w-12 h-12 bg-red-100 rounded-full mx-auto flex items-center justify-center">
+            <AlertCircle size={24} className="text-red-500" />
+          </div>
+          <h3 className="font-headline font-bold text-red-700 text-lg">Bookings Temporarily Paused</h3>
+          <p className="text-red-600/70 text-sm max-w-xs mx-auto">
+            Our chalets are currently under maintenance. Please check back soon for availability.
+          </p>
+        </motion.div>
+      )}
+
+      {submitError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium"
+        >
+          <AlertCircle size={18} />
+          {submitError}
+        </motion.div>
+      )}
 
       {/* Calendar Card */}
       <motion.div
@@ -180,18 +284,10 @@ export const Booking: React.FC<BookingProps> = ({ onProceed }) => {
         className="bg-white rounded-[24px] p-6 shadow-sm border border-primary-navy/5"
       >
         <div className="flex justify-between items-center mb-8">
-          <h3 className="font-headline text-lg font-bold">{MONTH_NAMES[currentMonth]} {currentYear}</h3>
-          <div className="flex gap-2">
-            <button
-              onClick={prevMonth}
-              disabled={!canGoBack}
-              className={cn("p-1 rounded-full transition-colors", canGoBack ? "hover:bg-primary-navy/5" : "opacity-20 cursor-not-allowed")}
-            >
-              <ChevronLeft size={20} className="text-primary-navy" />
-            </button>
-            <button onClick={nextMonth} className="p-1 rounded-full hover:bg-primary-navy/5 transition-colors">
-              <ChevronRight size={20} className="text-primary-navy" />
-            </button>
+          <h3 className="font-headline text-lg font-bold">{monthName}</h3>
+          <div className="flex gap-4">
+            <button onClick={prevMonth}><ChevronLeft size={20} className="text-primary-navy/40 hover:text-primary-navy" /></button>
+            <button onClick={nextMonth}><ChevronRight size={20} className="text-primary-navy hover:text-primary-navy/60" /></button>
           </div>
         </div>
 
@@ -199,27 +295,30 @@ export const Booking: React.FC<BookingProps> = ({ onProceed }) => {
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
 
-        <div className="grid grid-cols-7 gap-y-1 text-center text-sm font-medium">
-          {/* Empty cells for offset */}
-          {Array.from({ length: firstDay }).map((_, i) => (
-            <div key={`empty-${i}`} className="py-2" />
-          ))}
+        <div className="grid grid-cols-7 gap-y-2 text-center text-sm font-medium">
+          {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const past = isPast(day);
-            const selected = isCheckIn(day) || isCheckOut(day);
-            const range = isInRange(day);
+            const dateObj = new Date(currentYear, currentMonth, day);
+            const isPast = dateObj < today;
+            const isBooked = isDayBooked(day);
+            const isUnavailable = isPast || isBooked || maintenanceMode;
+            const isStart = selectedDates.start === day;
+            const isEnd = selectedDates.end === day;
+            const isSelected = isStart || isEnd;
+            const isInRange = selectedDates.start && selectedDates.end && day > selectedDates.start && day < selectedDates.end;
 
             return (
               <div
                 key={day}
-                onClick={() => !past && handleDayClick(day)}
+                onClick={() => !isUnavailable && handleDayClick(day)}
                 className={cn(
-                  "py-2 rounded-lg transition-all",
-                  past && "text-primary-navy/15 cursor-not-allowed",
-                  !past && !selected && !range && "cursor-pointer hover:bg-primary-navy/5",
-                  selected && "bg-primary-navy text-white font-bold cursor-pointer",
-                  range && "bg-primary-navy/10 text-primary-navy cursor-pointer"
+                  "py-2 rounded-lg transition-all relative",
+                  isUnavailable ? "cursor-not-allowed" : "cursor-pointer hover:bg-primary-navy/5",
+                  isPast && !isBooked && "text-primary-navy/20",
+                  isBooked && "bg-red-50 text-red-300 line-through",
+                  isSelected && !isUnavailable && "bg-primary-navy text-white font-bold",
+                  isInRange && !isUnavailable && "bg-primary-navy/5 text-primary-navy"
                 )}
               >
                 {day}
@@ -228,99 +327,233 @@ export const Booking: React.FC<BookingProps> = ({ onProceed }) => {
           })}
         </div>
 
-        {/* Selection hint */}
-        <div className="mt-6 text-center">
-          {!checkIn && (
-            <p className="text-xs text-primary-navy/40">Tap a date to select check-in</p>
-          )}
-          {checkIn && !checkOut && (
-            <p className="text-xs text-primary-navy/40">
-              Check-in: <span className="font-bold text-primary-navy">{formatDate(checkIn)}</span> — now tap your check-out date
-            </p>
-          )}
-          {checkIn && checkOut && (
-            <p className="text-xs text-primary-navy/40">
-              <span className="font-bold text-primary-navy">{formatDate(checkIn)}</span> → <span className="font-bold text-primary-navy">{formatDate(checkOut)}</span> · {nights} night{nights !== 1 ? 's' : ''}
-            </p>
-          )}
+        {/* Legend */}
+        <div className="mt-4 flex items-center gap-4 justify-center">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded bg-red-50 border border-red-200"></span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Booked</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Selected</span>
+          </div>
         </div>
+
+        {errors.dates && <p className="text-red-500 text-xs mt-4 font-medium">{errors.dates}</p>}
+
+        {selectedDates.start && (
+          <div className="mt-4 text-xs text-primary-navy/60 text-center">
+            {selectedDates.end
+              ? `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
+              : `Select check-out date`}
+          </div>
+        )}
       </motion.div>
 
       {/* Pricing Summary */}
-      <AnimatePresence>
-        {nights > 0 && (
-          <motion.section
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-[#f4f4f0] p-6 rounded-[24px] space-y-4 overflow-hidden"
-          >
-            <div className="flex justify-between text-sm">
-              <span className="text-primary-navy/60 font-medium">Nightly Rate</span>
-              <span className="font-bold text-primary-navy">{NIGHTLY_RATE} OMR × {nights} night{nights !== 1 ? 's' : ''}</span>
+      {nights > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-surface-container-low p-6 rounded-[24px] space-y-4"
+        >
+          <div className="flex justify-between text-sm">
+            <span className="text-primary-navy/60 font-medium">Nightly Rate</span>
+            <span className="font-bold text-primary-navy">{nightlyRate} OMR &times; {nights} night{nights > 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-primary-navy/60 font-medium">Security Deposit (OMR)</span>
+            <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
+          </div>
+          <div className="pt-4 border-t border-primary-navy/5 flex justify-between items-end">
+            <div>
+              <p className="text-xl font-bold font-headline">Total</p>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-primary-navy/60 font-medium">Security Deposit (OMR)</span>
-              <span className="font-bold text-primary-navy">{SECURITY_DEPOSIT} OMR</span>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-secondary-gold font-headline">{total} OMR</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40">Inclusive of all taxes</p>
             </div>
-            <div className="pt-4 border-t border-primary-navy/5 flex justify-between items-end">
-              <div>
-                <p className="text-xl font-bold font-headline">Total</p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-secondary-gold font-headline">{grandTotal} OMR</p>
-                <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40">Inclusive of all taxes</p>
-              </div>
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
+          </div>
+        </motion.section>
+      )}
 
       {/* Form */}
       <section className="space-y-6">
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Full Name</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Full Name *</label>
           <input
             type="text"
             value={guestName}
-            onChange={e => setGuestName(e.target.value)}
+            onChange={(e) => { setGuestName(e.target.value); setErrors(prev => ({ ...prev, name: '' })); }}
             placeholder="e.g. Ahmed Al-Said"
-            className="w-full bg-[#f4f4f0] border-none rounded-xl py-4 px-6 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm"
+            className={cn(
+              "w-full bg-surface-container-low border rounded-xl py-4 px-6 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm",
+              errors.name ? "border-red-300" : "border-transparent"
+            )}
           />
+          {errors.name && <p className="text-red-500 text-xs font-medium">{errors.name}</p>}
         </div>
+
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">WhatsApp Phone Number</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">WhatsApp Phone Number *</label>
           <div className="flex gap-3">
-            <div className="bg-[#f4f4f0] rounded-xl py-4 px-4 text-sm font-bold text-primary-navy/60">+968</div>
+            <div className="bg-surface-container-low rounded-xl py-4 px-4 text-sm font-bold text-primary-navy/60">+968</div>
             <input
               type="text"
-              value={phone}
-              onChange={e => setPhone(e.target.value.replace(/[^0-9 ]/g, ''))}
+              value={guestPhone}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^\d\s]/g, '');
+                setGuestPhone(val);
+                setErrors(prev => ({ ...prev, phone: '' }));
+              }}
               placeholder="9000 0000"
-              className="flex-1 bg-[#f4f4f0] border-none rounded-xl py-4 px-6 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm"
+              maxLength={9}
+              className={cn(
+                "flex-1 bg-surface-container-low border rounded-xl py-4 px-6 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm",
+                errors.phone ? "border-red-300" : "border-transparent"
+              )}
             />
           </div>
+          {errors.phone && <p className="text-red-500 text-xs font-medium">{errors.phone}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Email (Optional)</label>
+          <input
+            type="email"
+            value={guestEmail}
+            onChange={(e) => { setGuestEmail(e.target.value); setErrors(prev => ({ ...prev, email: '' })); }}
+            placeholder="you@example.com"
+            className={cn(
+              "w-full bg-surface-container-low border rounded-xl py-4 px-6 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm",
+              errors.email ? "border-red-300" : "border-transparent"
+            )}
+          />
+          {errors.email && <p className="text-red-500 text-xs font-medium">{errors.email}</p>}
         </div>
       </section>
+
+      {/* Payment Method Selection */}
+      {nights > 0 && (
+        <section className="space-y-4">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Payment Method *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('thawani')}
+              className={cn(
+                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                paymentMethod === 'thawani'
+                  ? "border-primary-navy bg-primary-navy/5"
+                  : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+              )}
+            >
+              {paymentMethod === 'thawani' && (
+                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+              )}
+              <CreditCard size={22} className={paymentMethod === 'thawani' ? "text-primary-navy" : "text-primary-navy/40"} />
+              <p className="text-sm font-bold text-primary-navy">Thawani</p>
+              <p className="text-[10px] text-primary-navy/50 font-medium">Instant online payment</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('bank_transfer')}
+              className={cn(
+                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                paymentMethod === 'bank_transfer'
+                  ? "border-primary-navy bg-primary-navy/5"
+                  : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+              )}
+            >
+              {paymentMethod === 'bank_transfer' && (
+                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+              )}
+              <Building2 size={22} className={paymentMethod === 'bank_transfer' ? "text-primary-navy" : "text-primary-navy/40"} />
+              <p className="text-sm font-bold text-primary-navy">Bank Transfer</p>
+              <p className="text-[10px] text-primary-navy/50 font-medium">Upload receipt for approval</p>
+            </button>
+          </div>
+
+          {/* Bank Transfer Details & Receipt Upload */}
+          {paymentMethod === 'bank_transfer' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-4"
+            >
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-amber-800">Bank Transfer Details</p>
+                <div className="text-xs text-amber-700 space-y-1">
+                  <p><span className="font-bold">Bank:</span> Bank Muscat</p>
+                  <p><span className="font-bold">Account:</span> Al-Nakheel Luxury Properties LLC</p>
+                  <p><span className="font-bold">IBAN:</span> OM12 0123 0000 0012 3456 789</p>
+                  <p><span className="font-bold">Reference:</span> Your phone number</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Upload Transfer Receipt *</label>
+                <label
+                  className={cn(
+                    "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                    receiptImage
+                      ? "border-emerald-300 bg-emerald-50"
+                      : errors.receipt ? "border-red-300 bg-red-50/50" : "border-primary-navy/20 bg-surface-container-low hover:border-primary-navy/40"
+                  )}
+                >
+                  {receiptImage ? (
+                    <div className="text-center space-y-1">
+                      <Check size={24} className="mx-auto text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-700">Receipt uploaded</p>
+                      <p className="text-[10px] text-emerald-600">{receiptFileName}</p>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-1">
+                      <Upload size={24} className="mx-auto text-primary-navy/30" />
+                      <p className="text-xs font-bold text-primary-navy/50">Tap to upload receipt</p>
+                      <p className="text-[10px] text-primary-navy/30">JPG, PNG or PDF</p>
+                    </div>
+                  )}
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleReceiptUpload} />
+                </label>
+                {errors.receipt && <p className="text-red-500 text-xs font-medium">{errors.receipt}</p>}
+              </div>
+            </motion.div>
+          )}
+        </section>
+      )}
 
       <div className="space-y-4 pt-4">
         <button
           onClick={handleSubmit}
-          disabled={!canSubmit || isLoading}
-          className={cn(
-            "w-full py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 transition-all flex items-center justify-center gap-2",
-            canSubmit
-              ? "bg-primary-navy text-white active:scale-[0.98]"
-              : "bg-primary-navy/20 text-primary-navy/40 cursor-not-allowed shadow-none"
-          )}
+          disabled={submitting || nights === 0 || maintenanceMode}
+          className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          Proceed to Secure Payment
-          <span className="text-[10px] opacity-40 lowercase font-normal">(via Thawani)</span>
+          {submitting ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : paymentMethod === 'bank_transfer' ? (
+            <>
+              Submit Booking
+              <span className="text-[10px] opacity-40 lowercase font-normal">(pending approval)</span>
+            </>
+          ) : (
+            <>
+              Proceed to Secure Payment
+              <span className="text-[10px] opacity-40 lowercase font-normal">(via Thawani)</span>
+            </>
+          )}
         </button>
         <div className="flex items-center justify-center gap-2 text-primary-navy/30">
           <ShieldCheck size={14} />
           <p className="text-[9px] font-bold text-center uppercase tracking-wider max-w-[200px]">
-            Your transaction is encrypted and secured by Thawani Gateway
+            {paymentMethod === 'bank_transfer'
+              ? 'Your booking will be confirmed once the admin approves your transfer'
+              : 'Your transaction is encrypted and secured by Thawani Gateway'}
           </p>
         </div>
       </div>
