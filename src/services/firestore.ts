@@ -536,21 +536,12 @@ export const firestoreReports = {
     const avgNightlyRate = paidBookings.length > 0 ? Math.round(paidBookings.reduce((s, b) => s + b.nightly_rate, 0) / paidBookings.length) : 0;
     const monthlyRevenue = paidBookings.reduce((s, b) => s + b.total_amount, 0);
 
-    // Occupancy by property
-    const propBookingCounts: Record<string, { name: string; nights: number; bookings: number }> = {};
-    for (const p of properties) {
-      propBookingCounts[p.id as string] = { name: (p as any).name, nights: 0, bookings: 0 };
-    }
-    for (const b of bookings.filter(bk => bk.status !== 'cancelled')) {
-      if (propBookingCounts[b.property_id]) {
-        propBookingCounts[b.property_id].nights += b.nights;
-        propBookingCounts[b.property_id].bookings += 1;
-      }
-    }
-    const maxNights = Math.max(...Object.values(propBookingCounts).map(p => p.nights), 1);
-    const occupancyByProperty = Object.values(propBookingCounts)
-      .map(p => ({ name: p.name, percentage: Math.round((p.nights / maxNights) * 100), bookings: p.bookings }))
-      .sort((a, b) => b.percentage - a.percentage);
+    // Total nights booked this month
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const totalNightsThisMonth = bookings
+      .filter(b => b.status !== 'cancelled' && b.check_in.startsWith(currentMonthStr))
+      .reduce((sum, b) => sum + b.nights, 0);
 
     const revenueByMonth = [
       { month: 'JAN', actual: 24000, forecast: 32000 },
@@ -561,17 +552,9 @@ export const firestoreReports = {
       { month: 'JUN', actual: 56000, forecast: 60000 },
     ];
 
-    const reviews = [
-      { name: 'Sarah J.', stay: '4 nights in Al-Bustan', text: 'The service was impeccable. Every detail from the arrival to the private dining was handled with pure Omani hospitality.', rating: 5 },
-      { name: 'Ahmed M.', stay: '2 nights in Coast View', text: 'Exceptional views and the modern luxury styling of the portal made booking very easy. Will return next month.', rating: 4 },
-      { name: 'Elena R.', stay: '1 week in Royal Suite', text: 'A true desert sanctuary. The staff anticipated our needs before we even asked. Pure 5-star experience.', rating: 5 },
-    ];
-
     return {
-      stats: { occupancyRate, avgNightlyRate, monthlyRevenue, guestSatisfaction: 4.9 },
-      occupancyByProperty,
+      stats: { occupancyRate, avgNightlyRate, monthlyRevenue, guestSatisfaction: 4.9, totalNightsThisMonth },
       revenueByMonth,
-      reviews,
     };
   },
 };

@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -29,6 +31,9 @@ export const Booking: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
+  // Booked dates from Firestore (real-time)
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -36,6 +41,28 @@ export const Booking: React.FC = () => {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, []);
+
+  // Real-time listener for existing bookings to prevent double-booking
+  useEffect(() => {
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dates = new Set<string>();
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (data.status === 'cancelled') return;
+
+        const checkIn = new Date(data.check_in);
+        const checkOut = new Date(data.check_out);
+        const cursor = new Date(checkIn);
+        while (cursor <= checkOut) {
+          dates.add(cursor.toISOString().split('T')[0]);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      });
+      setBookedDates(dates);
+    });
+    return () => unsubscribe();
   }, []);
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -48,13 +75,32 @@ export const Booking: React.FC = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const isDayBooked = (day: number): boolean => {
+    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return bookedDates.has(dateStr);
+  };
+
   const handleDayClick = (day: number) => {
     const clickedDate = new Date(currentYear, currentMonth, day);
     if (clickedDate < today) return;
+    if (isDayBooked(day)) return;
 
     if (!selectedDates.start || (selectedDates.start && selectedDates.end)) {
       setSelectedDates({ start: day, end: null });
     } else {
+      // Check if any day in the range is booked
+      const rangeStart = Math.min(day, selectedDates.start);
+      const rangeEnd = Math.max(day, selectedDates.start);
+      let hasConflict = false;
+      for (let d = rangeStart; d <= rangeEnd; d++) {
+        if (isDayBooked(d)) { hasConflict = true; break; }
+      }
+      if (hasConflict) {
+        setErrors(prev => ({ ...prev, dates: 'Selected range includes unavailable dates' }));
+        setSelectedDates({ start: day, end: null });
+        return;
+      }
+
       if (day > selectedDates.start) {
         setSelectedDates({ ...selectedDates, end: day });
       } else {
@@ -224,6 +270,8 @@ export const Booking: React.FC = () => {
             const day = i + 1;
             const dateObj = new Date(currentYear, currentMonth, day);
             const isPast = dateObj < today;
+            const isBooked = isDayBooked(day);
+            const isUnavailable = isPast || isBooked;
             const isStart = selectedDates.start === day;
             const isEnd = selectedDates.end === day;
             const isSelected = isStart || isEnd;
@@ -232,18 +280,32 @@ export const Booking: React.FC = () => {
             return (
               <div
                 key={day}
-                onClick={() => !isPast && handleDayClick(day)}
+                onClick={() => !isUnavailable && handleDayClick(day)}
                 className={cn(
-                  "py-2 rounded-lg transition-all",
-                  isPast ? "text-primary-navy/20 cursor-not-allowed" : "cursor-pointer hover:bg-primary-navy/5",
-                  isSelected && "bg-primary-navy text-white font-bold",
-                  isInRange && "bg-primary-navy/5 text-primary-navy"
+                  "py-2 rounded-lg transition-all relative",
+                  isUnavailable ? "cursor-not-allowed" : "cursor-pointer hover:bg-primary-navy/5",
+                  isPast && !isBooked && "text-primary-navy/20",
+                  isBooked && "bg-red-50 text-red-300 line-through",
+                  isSelected && !isUnavailable && "bg-primary-navy text-white font-bold",
+                  isInRange && !isUnavailable && "bg-primary-navy/5 text-primary-navy"
                 )}
               >
                 {day}
               </div>
             );
           })}
+        </div>
+
+        {/* Legend */}
+        <div className="mt-4 flex items-center gap-4 justify-center">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded bg-red-50 border border-red-200"></span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Booked</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Selected</span>
+          </div>
         </div>
 
         {errors.dates && <p className="text-red-500 text-xs mt-4 font-medium">{errors.dates}</p>}
