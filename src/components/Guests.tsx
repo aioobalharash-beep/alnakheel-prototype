@@ -1,52 +1,139 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Search, MoreVertical, Calendar as CalendarIcon, MessageSquare, Phone, CheckCircle2, UserPlus, X } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
-import { guestsApi, propertiesApi } from '../services/api';
-import type { Guest, Property } from '../types';
+import { propertiesApi, bookingsApi } from '../services/api';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import type { Property } from '../types';
+
+type DisplayStatus = 'pending' | 'upcoming' | 'in-progress' | 'completed';
+
+interface BookingGuest {
+  id: string;
+  guest_name: string;
+  guest_phone: string;
+  guest_email?: string;
+  property_name: string;
+  property_id: string;
+  check_in: string;
+  check_out: string;
+  nights: number;
+  total_amount: number;
+  status: string;
+  payment_status: string;
+  payment_method: string;
+  created_at: string;
+  displayStatus: DisplayStatus;
+}
+
+function computeDisplayStatus(booking: { status: string; check_in: string; check_out: string }): DisplayStatus {
+  if (booking.status === 'pending') return 'pending';
+  if (booking.status === 'cancelled') return 'completed';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const checkIn = new Date(booking.check_in);
+  checkIn.setHours(0, 0, 0, 0);
+  const checkOut = new Date(booking.check_out);
+  checkOut.setHours(0, 0, 0, 0);
+
+  if (today < checkIn) return 'upcoming';
+  if (today >= checkIn && today <= checkOut) return 'in-progress';
+  return 'completed';
+}
+
+const STATUS_CONFIG: Record<DisplayStatus, { label: string; badgeClass: string }> = {
+  'pending': { label: 'Pending Approval', badgeClass: 'bg-amber-50 text-amber-700' },
+  'upcoming': { label: 'Upcoming', badgeClass: 'bg-blue-50 text-blue-700' },
+  'in-progress': { label: 'Stay in Progress', badgeClass: 'bg-emerald-50 text-emerald-700' },
+  'completed': { label: 'Completed', badgeClass: 'bg-gray-100 text-gray-500' },
+};
 
 export const Guests: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightName = searchParams.get('highlight');
   const highlightedRef = useRef<HTMLDivElement>(null);
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [stats, setStats] = useState({ checkedIn: 0, upcoming: 0, checkingOut: 0, completed: 0, total: 0 });
+
+  const [rawBookings, setRawBookings] = useState<BookingGuest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | DisplayStatus>('all');
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [addSubmitting, setAddSubmitting] = useState(false);
 
-  const loadData = () => {
-    const params: { status?: string; search?: string } = {};
-    if (activeFilter !== 'all') params.status = activeFilter;
-    if (searchQuery) params.search = searchQuery;
-
-    Promise.all([
-      guestsApi.list(params),
-      guestsApi.stats(),
-    ]).then(([guestData, statsData]) => {
-      setGuests(guestData);
-      setStats(statsData);
-    }).catch(console.error)
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { loadData(); }, [activeFilter, searchQuery]);
+  // Real-time bookings from Firestore — single source of truth
+  useEffect(() => {
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const guests = snapshot.docs
+        .map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            guest_name: data.guest_name || '',
+            guest_phone: data.guest_phone || '',
+            guest_email: data.guest_email || '',
+            property_name: data.property_name || '',
+            property_id: data.property_id || '',
+            check_in: data.check_in || '',
+            check_out: data.check_out || '',
+            nights: data.nights || 0,
+            total_amount: data.total_amount || 0,
+            status: data.status || 'pending',
+            payment_status: data.payment_status || 'pending',
+            payment_method: data.payment_method || '',
+            created_at: data.created_at || '',
+            displayStatus: computeDisplayStatus({
+              status: data.status,
+              check_in: data.check_in,
+              check_out: data.check_out,
+            }),
+          } as BookingGuest;
+        })
+        .filter(b => b.status !== 'cancelled');
+      setRawBookings(guests);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     propertiesApi.list().then(setProperties).catch(console.error);
   }, []);
 
+  // Filtered + searched guest list
+  const guests = useMemo(() => {
+    let list = rawBookings;
+    if (activeFilter !== 'all') {
+      list = list.filter(g => g.displayStatus === activeFilter);
+    }
+    if (searchQuery) {
+      const s = searchQuery.toLowerCase();
+      list = list.filter(g =>
+        g.guest_name.toLowerCase().includes(s) || g.guest_phone.includes(s)
+      );
+    }
+    return list;
+  }, [rawBookings, activeFilter, searchQuery]);
+
+  // Stats computed from real-time data
+  const stats = useMemo(() => ({
+    pending: rawBookings.filter(g => g.displayStatus === 'pending').length,
+    upcoming: rawBookings.filter(g => g.displayStatus === 'upcoming').length,
+    inProgress: rawBookings.filter(g => g.displayStatus === 'in-progress').length,
+    completed: rawBookings.filter(g => g.displayStatus === 'completed').length,
+  }), [rawBookings]);
+
   // Scroll to highlighted guest when data loads
   useEffect(() => {
     if (!loading && highlightName && highlightedRef.current) {
       highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Clear the highlight param after 3 seconds so the ring fades
       const timer = setTimeout(() => {
         setSearchParams({}, { replace: true });
       }, 3000);
@@ -66,18 +153,21 @@ export const Guests: React.FC = () => {
 
     setAddSubmitting(true);
     try {
-      await guestsApi.create({
-        name: addForm.name.trim(),
-        phone: `+968${addForm.phone.replace(/\s/g, '')}`,
-        email: addForm.email || undefined,
+      const prop = properties.find(p => p.id === addForm.property_id);
+      await bookingsApi.create({
+        property_id: addForm.property_id,
+        property_name: addForm.property_name || prop?.name || '',
+        guest_name: addForm.name.trim(),
+        guest_phone: `+968${addForm.phone.replace(/\s/g, '')}`,
+        guest_email: addForm.email || undefined,
         check_in: addForm.check_in,
         check_out: addForm.check_out,
-        property_id: addForm.property_id,
-        property_name: addForm.property_name,
+        nightly_rate: prop?.nightly_rate || 120,
+        security_deposit: prop?.security_deposit || 50,
+        payment_method: 'walk_in' as any,
       });
       setShowAddModal(false);
       setAddForm({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
-      loadData();
     } catch (err) {
       console.error('Failed to add guest:', err);
     } finally {
@@ -85,19 +175,11 @@ export const Guests: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (guestId: string, newStatus: string) => {
-    try {
-      await guestsApi.update(guestId, { status: newStatus });
-      loadData();
-    } catch (err) {
-      console.error('Failed to update guest:', err);
-    }
-  };
-
-  const filters = [
+  const filters: { id: 'all' | DisplayStatus; label: string }[] = [
     { id: 'all', label: 'All Guests' },
-    { id: 'checked-in', label: 'Checked-in' },
+    { id: 'pending', label: 'Pending' },
     { id: 'upcoming', label: 'Upcoming' },
+    { id: 'in-progress', label: 'In Progress' },
     { id: 'completed', label: 'Completed' },
   ];
 
@@ -108,23 +190,25 @@ export const Guests: React.FC = () => {
         <p className="text-primary-navy/50 text-sm font-medium">Curating hospitality for Al-Nakheel</p>
       </section>
 
+      {/* Stat Widgets */}
       <section className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-primary-navy/5 shadow-sm">
-          <p className="text-[10px] uppercase tracking-widest text-primary-navy/50 font-bold mb-2">Checked-in Today</p>
+        <div className="bg-primary-navy p-5 rounded-xl shadow-lg">
+          <p className="text-[10px] uppercase tracking-widest text-white/50 font-bold mb-2">Pending Approval</p>
           <div className="flex items-end gap-2">
-            <span className="text-3xl font-headline font-bold text-primary-navy">{stats.checkedIn}</span>
-            {stats.checkingOut > 0 && <span className="text-xs text-amber-600 font-bold mb-1">{stats.checkingOut} leaving</span>}
+            <span className="text-3xl font-headline font-bold text-white">{String(stats.pending).padStart(2, '0')}</span>
+            {stats.pending > 0 && <span className="bg-secondary-gold/20 text-secondary-gold px-2 py-0.5 rounded text-[9px] font-bold uppercase mb-1">New</span>}
           </div>
         </div>
-        <div className="bg-primary-navy p-5 rounded-xl shadow-lg">
-          <p className="text-[10px] uppercase tracking-widest text-white/50 font-bold mb-2">Upcoming Arrivals</p>
+        <div className="bg-white p-5 rounded-xl border border-primary-navy/5 shadow-sm">
+          <p className="text-[10px] uppercase tracking-widest text-primary-navy/50 font-bold mb-2">Upcoming Arrivals</p>
           <div className="flex items-end gap-2">
-            <span className="text-3xl font-headline font-bold text-white">{String(stats.upcoming).padStart(2, '0')}</span>
-            <span className="text-xs text-secondary-gold font-bold mb-1">New</span>
+            <span className="text-3xl font-headline font-bold text-primary-navy">{String(stats.upcoming).padStart(2, '0')}</span>
+            {stats.inProgress > 0 && <span className="text-xs text-emerald-600 font-bold mb-1">{stats.inProgress} currently in</span>}
           </div>
         </div>
       </section>
 
+      {/* Search + Filters */}
       <section className="space-y-4">
         <div className="relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-navy/40" size={18} />
@@ -153,6 +237,7 @@ export const Guests: React.FC = () => {
         </div>
       </section>
 
+      {/* Guest List */}
       <section className="space-y-4">
         {loading ? (
           <div className="space-y-4 animate-pulse">
@@ -162,101 +247,94 @@ export const Guests: React.FC = () => {
           <p className="text-center text-sm text-primary-navy/40 py-12">No guests found</p>
         ) : (
           guests.map((guest, i) => {
-            const isHighlighted = highlightName && guest.name.toLowerCase() === highlightName.toLowerCase();
+            const isHighlighted = highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase();
+            const cfg = STATUS_CONFIG[guest.displayStatus];
+
             return (
-            <motion.div
-              key={guest.id}
-              ref={isHighlighted ? highlightedRef : undefined}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className={cn(
-                "bg-white p-5 rounded-xl shadow-sm border space-y-4 transition-all duration-500",
-                isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" : "border-primary-navy/5"
-              )}
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex gap-3">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-navy/5">
-                    <img src={guest.avatar || `https://i.pravatar.cc/150?u=${guest.id}`} alt={guest.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <motion.div
+                key={guest.id}
+                ref={isHighlighted ? highlightedRef : undefined}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.08 }}
+                className={cn(
+                  "bg-white p-5 rounded-xl shadow-sm border space-y-4 transition-all duration-500",
+                  isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" : "border-primary-navy/5"
+                )}
+              >
+                {/* Header */}
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-3">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-navy/5">
+                      <img src={`https://i.pravatar.cc/150?u=${guest.guest_name}`} alt={guest.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div>
+                      <h3 className="font-headline font-bold text-primary-navy">{guest.guest_name}</h3>
+                      <p className="text-xs text-primary-navy/50 font-medium">{guest.guest_phone}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-headline font-bold text-primary-navy">{guest.name}</h3>
-                    <p className="text-xs text-primary-navy/50 font-medium">{guest.phone}</p>
+                  <div className={cn("px-3 py-1 rounded-full text-[10px] uppercase tracking-tighter font-bold", cfg.badgeClass)}>
+                    {cfg.label}
                   </div>
                 </div>
-                <button className="p-1 text-primary-navy/40 hover:bg-primary-navy/5 rounded-lg transition-colors">
-                  <MoreVertical size={20} />
-                </button>
-              </div>
 
-              <div className="flex items-center gap-4 text-xs font-bold">
-                <div className="flex items-center gap-1.5 text-primary-navy">
-                  <CalendarIcon size={14} className="text-secondary-gold" />
-                  {new Date(guest.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - {new Date(guest.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
-                </div>
-                <div className={cn(
-                  "px-3 py-1 rounded-full text-[10px] uppercase tracking-tighter",
-                  guest.status === 'checked-in' && "bg-emerald-50 text-emerald-700",
-                  guest.status === 'upcoming' && "bg-amber-50 text-amber-700",
-                  guest.status === 'checking-out' && "bg-blue-50 text-blue-700",
-                  guest.status === 'completed' && "bg-gray-50 text-gray-600",
-                )}>
-                  {guest.status.replace('-', ' ')}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-primary-navy/5">
-                {guest.status === 'checked-in' && (
-                  <>
-                    <button className="flex-1 py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all bg-primary-navy text-white">
-                      Service Request
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(guest.id, 'checking-out')}
-                      className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all"
-                    >
-                      <CheckCircle2 size={16} />
-                    </button>
-                  </>
-                )}
-                {guest.status === 'upcoming' && (
-                  <>
-                    <button
-                      onClick={() => handleStatusChange(guest.id, 'checked-in')}
-                      className="flex-1 py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all bg-primary-navy text-white"
-                    >
-                      Check In
-                    </button>
-                    <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
-                      <Phone size={16} />
-                    </button>
-                  </>
-                )}
-                {guest.status === 'checking-out' && (
-                  <>
-                    <button
-                      onClick={() => handleStatusChange(guest.id, 'completed')}
-                      className="flex-1 py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all border border-primary-navy text-primary-navy"
-                    >
-                      Complete Checkout
-                    </button>
-                    <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
-                      <MessageSquare size={16} />
-                    </button>
-                  </>
-                )}
-                {guest.status === 'completed' && (
-                  <div className="flex-1 py-2.5 text-center text-[10px] uppercase font-bold tracking-widest text-primary-navy/40">
-                    Stay Completed
+                {/* Dates + Property */}
+                <div className="flex items-center gap-4 text-xs font-bold flex-wrap">
+                  <div className="flex items-center gap-1.5 text-primary-navy">
+                    <CalendarIcon size={14} className="text-secondary-gold" />
+                    {new Date(guest.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - {new Date(guest.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
                   </div>
-                )}
-              </div>
-            </motion.div>
-          );})
+                  <span className="text-primary-navy/30">&bull;</span>
+                  <span className="text-primary-navy/60">{guest.property_name}</span>
+                  <span className="text-primary-navy/30">&bull;</span>
+                  <span className="text-primary-navy/60">{guest.nights} night{guest.nights > 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Action row */}
+                <div className="flex gap-3 pt-4 border-t border-primary-navy/5">
+                  {guest.displayStatus === 'pending' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-1">
+                        <AlertCircle size={14} className="text-amber-500" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Awaiting Payment Approval</span>
+                      </div>
+                      <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
+                        <Phone size={16} />
+                      </button>
+                    </>
+                  )}
+                  {guest.displayStatus === 'upcoming' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-1">
+                        <Clock size={14} className="text-blue-500" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
+                          Arrives {new Date(guest.check_in).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                      <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
+                        <Phone size={16} />
+                      </button>
+                    </>
+                  )}
+                  {guest.displayStatus === 'in-progress' && (
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Guest Currently Staying</span>
+                    </div>
+                  )}
+                  {guest.displayStatus === 'completed' && (
+                    <div className="flex-1 py-2.5 text-center text-[10px] uppercase font-bold tracking-widest text-primary-navy/40">
+                      Stay Completed
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })
         )}
       </section>
 
+      {/* FAB */}
       <button
         onClick={() => setShowAddModal(true)}
         className="fixed bottom-24 right-6 w-14 h-14 bg-secondary-gold text-primary-navy rounded-full shadow-lg shadow-secondary-gold/20 flex items-center justify-center active:scale-95 transition-all z-40"
