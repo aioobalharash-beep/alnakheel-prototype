@@ -379,7 +379,7 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => navigate(`/guests?highlight=${encodeURIComponent(nextCheckIn.guest_name)}`)}
+                    onClick={() => navigate(`/admin/guests?highlight=${encodeURIComponent(nextCheckIn.guest_name)}`)}
                     className="mt-4 w-full flex items-center justify-center gap-2 bg-primary-navy text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
                   >
                     View Details
@@ -442,7 +442,7 @@ export const Dashboard: React.FC = () => {
                     <span className="text-secondary-gold font-bold font-headline">OMR {recentBooking.total_amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <button
-                    onClick={() => navigate(`/guests?highlight=${encodeURIComponent(recentBooking.guest_name)}`)}
+                    onClick={() => navigate(`/admin/guests?highlight=${encodeURIComponent(recentBooking.guest_name)}`)}
                     className="mt-3 w-full flex items-center justify-center gap-2 bg-secondary-gold text-primary-navy py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
                   >
                     View Details
