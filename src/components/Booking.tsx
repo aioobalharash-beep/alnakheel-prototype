@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import type { Property } from '../types';
 
@@ -34,6 +34,9 @@ export const Booking: React.FC = () => {
   // Booked dates from Firestore (real-time)
   const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
 
+  // Maintenance mode — blocks all bookings when admin toggles off
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -61,6 +64,17 @@ export const Booking: React.FC = () => {
         }
       });
       setBookedDates(dates);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time listener for property availability status
+  useEffect(() => {
+    const ref = doc(db, 'settings', 'property_status');
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setMaintenanceMode(snap.data().is_live === false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -235,6 +249,23 @@ export const Booking: React.FC = () => {
         </p>
       </section>
 
+      {/* Maintenance Mode Banner */}
+      {maintenanceMode && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 rounded-[20px] p-6 text-center space-y-2"
+        >
+          <div className="w-12 h-12 bg-red-100 rounded-full mx-auto flex items-center justify-center">
+            <AlertCircle size={24} className="text-red-500" />
+          </div>
+          <h3 className="font-headline font-bold text-red-700 text-lg">Bookings Temporarily Paused</h3>
+          <p className="text-red-600/70 text-sm max-w-xs mx-auto">
+            Our chalets are currently under maintenance. Please check back soon for availability.
+          </p>
+        </motion.div>
+      )}
+
       {submitError && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -271,7 +302,7 @@ export const Booking: React.FC = () => {
             const dateObj = new Date(currentYear, currentMonth, day);
             const isPast = dateObj < today;
             const isBooked = isDayBooked(day);
-            const isUnavailable = isPast || isBooked;
+            const isUnavailable = isPast || isBooked || maintenanceMode;
             const isStart = selectedDates.start === day;
             const isEnd = selectedDates.end === day;
             const isSelected = isStart || isEnd;
@@ -500,7 +531,7 @@ export const Booking: React.FC = () => {
       <div className="space-y-4 pt-4">
         <button
           onClick={handleSubmit}
-          disabled={submitting || nights === 0}
+          disabled={submitting || nights === 0 || maintenanceMode}
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Bed, Banknote, Star, ChevronLeft, ChevronRight, User, X, ArrowRight, Clock, Sparkles } from 'lucide-react';
+import { Banknote, Star, ChevronLeft, ChevronRight, User, X, ArrowRight, Clock, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { dashboardApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface DashboardData {
@@ -40,6 +40,11 @@ export const Dashboard: React.FC = () => {
   // Real-time bookings from Firestore (same source as Calendar page)
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
 
+  // Chalet availability toggle (Firestore settings/property_status)
+  const [chaletLive, setChaletLive] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
+
   // Calendar widget state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
@@ -60,6 +65,35 @@ export const Dashboard: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time listener for property status
+  useEffect(() => {
+    const ref = doc(db, 'settings', 'property_status');
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setChaletLive(snap.data().is_live !== false);
+      } else {
+        // Default to live if doc doesn't exist yet
+        setChaletLive(true);
+      }
+      setStatusLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const toggleChaletStatus = async () => {
+    setToggling(true);
+    try {
+      await setDoc(doc(db, 'settings', 'property_status'), {
+        is_live: !chaletLive,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    } finally {
+      setToggling(false);
+    }
+  };
 
   // Calendar helpers
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -185,23 +219,45 @@ export const Dashboard: React.FC = () => {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
-          className="bg-surface-container-high p-6 rounded-2xl"
+          className="bg-white p-6 rounded-2xl shadow-sm border border-primary-navy/5"
         >
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">Occupancy</span>
-            <Bed className="text-primary-navy" size={20} />
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">Chalet Availability</span>
+            {statusLoading ? (
+              <div className="w-10 h-5 bg-primary-navy/10 rounded-full animate-pulse" />
+            ) : (
+              <span className={cn(
+                "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full",
+                chaletLive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+              )}>
+                {chaletLive ? 'Live' : 'Maintenance'}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-2xl font-bold font-headline">{data.occupancy}%</span>
-            <div className="flex-1 h-1.5 bg-primary-navy/10 rounded-full overflow-hidden">
+          <p className="text-xs text-primary-navy/50 font-medium mb-4">
+            {chaletLive ? 'Accepting New Bookings' : 'Bookings Paused'}
+          </p>
+          {/* Toggle switch */}
+          <button
+            onClick={toggleChaletStatus}
+            disabled={toggling || statusLoading}
+            className="relative w-full flex items-center justify-between gap-3 group disabled:opacity-60"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/60">
+              {chaletLive ? 'Online' : 'Offline'}
+            </span>
+            <div className={cn(
+              "relative w-12 h-6 rounded-full transition-colors duration-300",
+              chaletLive ? "bg-emerald-500" : "bg-red-400"
+            )}>
               <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${data.occupancy}%` }}
-                transition={{ duration: 1, delay: 0.5 }}
-                className="h-full bg-primary-navy"
+                layout
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md"
+                style={{ left: chaletLive ? '26px' : '2px' }}
               />
             </div>
-          </div>
+          </button>
         </motion.div>
       </section>
 
