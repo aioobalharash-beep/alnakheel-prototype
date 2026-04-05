@@ -188,6 +188,7 @@ export interface FirestoreBooking {
   payment_status: string;
   payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
   receipt_image?: string;
+  receiptURL?: string;
   created_at: string;
 }
 
@@ -204,6 +205,7 @@ export const firestoreBookings = {
     security_deposit: number;
     payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
     receipt_image?: string;
+    receiptURL?: string;
   }): Promise<FirestoreBooking> {
     const checkIn = new Date(data.check_in);
     const checkOut = new Date(data.check_out);
@@ -229,6 +231,7 @@ export const firestoreBookings = {
       payment_status: isBankTransfer ? 'pending' : (isWalkIn ? 'pending' : 'paid'),
       payment_method: data.payment_method,
       receipt_image: data.receipt_image || '',
+      receiptURL: data.receiptURL || '',
       created_at: new Date().toISOString(),
     };
 

@@ -37,6 +37,7 @@ export const bookingsApi = {
     security_deposit: number;
     payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
     receipt_image?: string;
+    receiptURL?: string;
   }) => {
     const booking = await firestoreBookings.create(data);
     return { booking, property_name: data.property_name };

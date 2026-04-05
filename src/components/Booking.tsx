@@ -5,7 +5,8 @@ import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload,
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../services/firebase';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -20,7 +21,7 @@ export const Booking: React.FC = () => {
   const [guestEmail, setGuestEmail] = useState('');
   const [selectedDates, setSelectedDates] = useState<{ start: number | null; end: number | null }>({ start: null, end: null });
   const [paymentMethod, setPaymentMethod] = useState<'thawani' | 'bank_transfer'>('thawani');
-  const [receiptImage, setReceiptImage] = useState<string>('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptFileName, setReceiptFileName] = useState('');
 
   // Validation errors
@@ -151,7 +152,7 @@ export const Booking: React.FC = () => {
       newErrors.dates = 'Please select check-in and check-out dates';
     }
 
-    if (paymentMethod === 'bank_transfer' && !receiptImage) {
+    if (paymentMethod === 'bank_transfer' && !receiptFile) {
       newErrors.receipt = 'Please upload your bank transfer receipt';
     }
 
@@ -162,13 +163,9 @@ export const Booking: React.FC = () => {
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setReceiptFile(file);
     setReceiptFileName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setReceiptImage(reader.result as string);
-      setErrors(prev => ({ ...prev, receipt: '' }));
-    };
-    reader.readAsDataURL(file);
+    setErrors(prev => ({ ...prev, receipt: '' }));
   };
 
   const handleSubmit = async () => {
@@ -181,6 +178,16 @@ export const Booking: React.FC = () => {
     const checkOut = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
 
     try {
+      // Upload receipt to Firebase Storage if bank transfer
+      let receiptURL: string | undefined;
+      if (paymentMethod === 'bank_transfer' && receiptFile) {
+        const timestamp = Date.now();
+        const safeName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storageRef = ref(storage, `receipts/${timestamp}_${safeName}`);
+        const snapshot = await uploadBytes(storageRef, receiptFile);
+        receiptURL = await getDownloadURL(snapshot.ref);
+      }
+
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -192,7 +199,7 @@ export const Booking: React.FC = () => {
         nightly_rate: property.nightly_rate,
         security_deposit: property.security_deposit,
         payment_method: paymentMethod,
-        receipt_image: paymentMethod === 'bank_transfer' ? receiptImage : undefined,
+        receiptURL,
       });
 
       navigate('/confirmation', {
@@ -501,12 +508,12 @@ export const Booking: React.FC = () => {
                 <label
                   className={cn(
                     "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                    receiptImage
+                    receiptFile
                       ? "border-emerald-300 bg-emerald-50"
                       : errors.receipt ? "border-red-300 bg-red-50/50" : "border-primary-navy/20 bg-surface-container-low hover:border-primary-navy/40"
                   )}
                 >
-                  {receiptImage ? (
+                  {receiptFile ? (
                     <div className="text-center space-y-1">
                       <Check size={24} className="mx-auto text-emerald-600" />
                       <p className="text-xs font-bold text-emerald-700">Receipt uploaded</p>

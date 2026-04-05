@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban, Paperclip } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { propertiesApi } from '../services/api';
@@ -25,6 +25,7 @@ interface BookingGuest {
   status: string;
   payment_status: string;
   payment_method: string;
+  receiptURL: string;
   created_at: string;
   isPinned: boolean;
   displayStatus: DisplayStatus;
@@ -67,6 +68,9 @@ export const Guests: React.FC = () => {
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
+  // Receipt viewer
+  const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
+
   // Add guest modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -95,6 +99,7 @@ export const Guests: React.FC = () => {
             status: data.status || 'pending',
             payment_status: data.payment_status || 'pending',
             payment_method: data.payment_method || '',
+            receiptURL: data.receiptURL || '',
             created_at: data.created_at || '',
             isPinned: data.isPinned === true,
             displayStatus: computeDisplayStatus({
@@ -349,13 +354,24 @@ export const Guests: React.FC = () => {
                 {/* Action row */}
                 <div className="flex gap-3 pt-4 border-t border-primary-navy/5 flex-wrap">
                   {guest.displayStatus === 'pending' && (
-                    <button
-                      onClick={() => handleApprove(guest.id)}
-                      className="flex-1 min-w-[140px] py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all bg-primary-navy text-white flex items-center justify-center gap-1.5"
-                    >
-                      <Check size={13} />
-                      Approve Booking
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleApprove(guest.id)}
+                        className="flex-1 min-w-[140px] py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all bg-primary-navy text-white flex items-center justify-center gap-1.5"
+                      >
+                        <Check size={13} />
+                        Approve Booking
+                      </button>
+                      {guest.payment_method === 'bank_transfer' && guest.receiptURL && (
+                        <button
+                          onClick={() => setReceiptViewURL(guest.receiptURL)}
+                          className="px-4 py-2.5 rounded-lg border border-secondary-gold/40 bg-secondary-gold/5 text-secondary-gold hover:bg-secondary-gold/10 text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <Paperclip size={13} />
+                          View Receipt
+                        </button>
+                      )}
+                    </>
                   )}
                   {guest.displayStatus === 'upcoming' && (
                     <div className="flex items-center gap-2 flex-1 min-w-[140px]">
@@ -446,6 +462,52 @@ export const Guests: React.FC = () => {
                     'Yes, Cancel'
                   )}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Receipt Viewer Modal */}
+      <AnimatePresence>
+        {receiptViewURL && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[24px] w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-primary-navy/5">
+                <div className="flex items-center gap-2">
+                  <Paperclip size={16} className="text-secondary-gold" />
+                  <h3 className="font-headline font-bold text-primary-navy">Transfer Receipt</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={receiptViewURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-primary-navy/5 text-primary-navy text-[10px] font-bold uppercase tracking-widest hover:bg-primary-navy/10 transition-all"
+                  >
+                    Open Full Size
+                  </a>
+                  <button onClick={() => setReceiptViewURL(null)} className="p-2 hover:bg-primary-navy/5 rounded-full">
+                    <X size={18} className="text-primary-navy/40" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-surface-container-low">
+                {receiptViewURL.toLowerCase().endsWith('.pdf') ? (
+                  <iframe src={receiptViewURL} className="w-full h-[60vh] rounded-lg border-0" title="Receipt PDF" />
+                ) : (
+                  <img
+                    src={receiptViewURL}
+                    alt="Transfer Receipt"
+                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
               </div>
             </motion.div>
           </div>
