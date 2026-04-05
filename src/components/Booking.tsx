@@ -5,8 +5,9 @@ import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload,
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import { sendWhatsAppInvoice } from './Invoices';
-import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { calculateTotalPrice, formatBreakdown, type PricingSettings, type PriceBreakdown } from '../services/pricingUtils';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -40,6 +41,9 @@ export const Booking: React.FC = () => {
 
   // Maintenance mode — blocks all bookings when admin toggles off
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  // Dynamic pricing from Firestore
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
 
   useEffect(() => {
     propertiesApi.list()
@@ -81,6 +85,17 @@ export const Booking: React.FC = () => {
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  // Load dynamic pricing settings
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'property_details'))
+      .then(snap => {
+        if (snap.exists() && snap.data().pricing) {
+          setPricingSettings(snap.data().pricing as PricingSettings);
+        }
+      })
+      .catch(console.error);
   }, []);
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -129,9 +144,25 @@ export const Booking: React.FC = () => {
   };
 
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
-  const nightlyRate = property?.nightly_rate || 120;
   const securityDeposit = property?.security_deposit || 50;
-  const total = (nightlyRate * nights) + securityDeposit;
+
+  // Dynamic pricing breakdown
+  const priceBreakdown: PriceBreakdown | null = (() => {
+    if (!nights || !selectedDates.start || !selectedDates.end) return null;
+    const checkInStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
+    const checkOutStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
+    const fallbackRate = property?.nightly_rate || 120;
+    const pricing: PricingSettings = pricingSettings || {
+      weekday_rate: fallbackRate,
+      thursday_rate: fallbackRate,
+      friday_rate: fallbackRate,
+      saturday_rate: fallbackRate,
+      special_dates: [],
+    };
+    return calculateTotalPrice(checkInStr, checkOutStr, pricing);
+  })();
+
+  const total = (priceBreakdown?.total || 0) + securityDeposit;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -246,7 +277,7 @@ export const Booking: React.FC = () => {
         guest_email: guestEmail || undefined,
         check_in: checkIn,
         check_out: checkOut,
-        nightly_rate: property.nightly_rate,
+        nightly_rate: priceBreakdown ? Math.round(priceBreakdown.total / nights) : property.nightly_rate,
         security_deposit: property.security_deposit,
         payment_method: paymentMethod,
         receiptURL,
@@ -416,20 +447,42 @@ export const Booking: React.FC = () => {
       </motion.div>
 
       {/* Pricing Summary */}
-      {nights > 0 && (
+      {nights > 0 && priceBreakdown && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-surface-container-low p-6 rounded-[24px] space-y-4"
         >
           <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">Nightly Rate</span>
-            <span className="font-bold text-primary-navy">{nightlyRate} OMR &times; {nights} night{nights > 1 ? 's' : ''}</span>
+            <span className="text-primary-navy/60 font-medium">Stay</span>
+            <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
           </div>
+
+          {/* Per-night breakdown */}
+          <div className="space-y-1.5 border-t border-primary-navy/5 pt-3">
+            {priceBreakdown.per_night.map(n => (
+              <div key={n.date} className="flex justify-between text-xs">
+                <span className="text-primary-navy/50">
+                  {new Date(n.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {n.isSpecial && <span className="ml-1 text-secondary-gold font-bold">(Special)</span>}
+                </span>
+                <span className="font-bold text-primary-navy">{n.rate} OMR</span>
+              </div>
+            ))}
+          </div>
+
+          {priceBreakdown.discount_amount > 0 && (
+            <div className="flex justify-between text-sm text-emerald-600">
+              <span className="font-medium">Discount</span>
+              <span className="font-bold">-{priceBreakdown.discount_amount} OMR</span>
+            </div>
+          )}
+
           <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">Security Deposit (OMR)</span>
+            <span className="text-primary-navy/60 font-medium">Security Deposit</span>
             <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
           </div>
+
           <div className="pt-4 border-t border-primary-navy/5 flex justify-between items-end">
             <div>
               <p className="text-xl font-bold font-headline">Total</p>
