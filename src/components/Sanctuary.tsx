@@ -5,6 +5,15 @@ import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, MessageCircle } f
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
+interface PricingSettings {
+  weekday_rate: number;
+  thursday_rate: number;
+  friday_rate: number;
+  saturday_rate: number;
+  special_dates?: { date: string; price: number }[];
+  discount?: { enabled: boolean; type: 'percent' | 'flat'; value: number; start_date: string; end_date: string };
+}
+
 interface PropertyDetails {
   name: string;
   capacity: number;
@@ -14,6 +23,7 @@ interface PropertyDetails {
   description: string;
   features: string[];
   gallery: { url: string; label: string }[];
+  pricing?: PricingSettings;
 }
 
 const DEFAULTS: PropertyDetails = {
@@ -131,7 +141,22 @@ export const Sanctuary: React.FC = () => {
         <h3 className="font-headline text-xl font-bold mb-4">{data.headline}</h3>
         <p className="text-primary-navy/60 leading-relaxed text-sm">{data.description}</p>
         <div className="mt-4 text-sm text-primary-navy/60">
-          <span className="font-bold text-secondary-gold">From {data.nightly_rate} OMR</span> per night
+          <span className="font-bold text-secondary-gold">From {(() => {
+            const p = data.pricing;
+            if (!p) return data.nightly_rate;
+            const baseRates = [p.weekday_rate, p.thursday_rate, p.friday_rate, p.saturday_rate];
+            const specialPrices = (p.special_dates || []).map(s => s.price);
+            const allRates = [...baseRates, ...specialPrices].filter(r => r > 0);
+            let minRate = Math.min(...allRates);
+            if (p.discount?.enabled && p.discount.value > 0) {
+              if (p.discount.type === 'percent') {
+                minRate = Math.round(minRate * (1 - p.discount.value / 100));
+              } else {
+                minRate = Math.max(0, minRate - p.discount.value);
+              }
+            }
+            return minRate;
+          })()} OMR</span> per night
         </div>
         {data.features.length > 0 && (
           <div className="mt-8 grid grid-cols-2 gap-y-4">

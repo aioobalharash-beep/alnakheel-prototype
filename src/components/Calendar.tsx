@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, PlusCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -291,9 +291,6 @@ export const Calendar: React.FC = () => {
         </div>
       </section>
 
-      <button className="fixed bottom-24 right-6 w-14 h-14 bg-primary-navy text-white rounded-2xl shadow-2xl flex items-center justify-center active:scale-95 transition-transform z-40">
-        <PlusCircle size={24} />
-      </button>
     </div>
   );
 };
