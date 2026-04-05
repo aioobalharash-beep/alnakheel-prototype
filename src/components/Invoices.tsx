@@ -22,6 +22,7 @@ interface RealtimeBooking {
   status: string;
   payment_status: string;
   payment_method: string;
+  receiptURL: string;
   created_at: string;
 }
 
@@ -133,8 +134,15 @@ export const Invoices: React.FC = () => {
 
   const handleSendWhatsApp = (b: RealtimeBooking) => {
     const phone = formatPhone(b.guest_phone);
+    const deposit = b.security_deposit || 0;
+    const stayAmount = b.total_amount - deposit;
+    const receiptLink = b.receiptURL || '';
     const message = encodeURIComponent(
-      `Assalamu Alaikum ${b.guest_name}, here is your invoice for your stay at Al-Nakheel Sanctuary: [Cloudinary Link]`
+      `Assalamu Alaikum ${b.guest_name},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nStay: ${stayAmount.toFixed(2)} OMR`
+      + (deposit > 0 ? `\nRefundable Deposit: ${deposit.toFixed(2)} OMR` : '')
+      + `\nTotal: ${b.total_amount.toFixed(2)} OMR`
+      + (receiptLink ? `\n\nReceipt: ${receiptLink}` : '')
+      + `\n\nThank you for choosing Al-Nakheel.`
     );
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
   };
