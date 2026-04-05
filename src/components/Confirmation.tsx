@@ -66,12 +66,24 @@ export const Confirmation: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          <button className="w-full bg-secondary-gold text-primary-navy py-4 rounded-[20px] font-bold text-sm flex items-center justify-center gap-3 shadow-lg shadow-secondary-gold/20 active:scale-[0.98] transition-all">
+          <button
+            onClick={() => navigate('/')}
+            className="w-full bg-white border border-primary-navy/10 text-primary-navy py-4 rounded-[20px] font-bold text-sm active:scale-[0.98] transition-all"
+          >
+            View Reservation Details
+          </button>
+          <button
+            onClick={() => {
+              const phone = booking.guest_phone?.replace(/[^\d]/g, '') || '';
+              const message = encodeURIComponent(
+                `Al-Nakheel Sanctuary\n📍 Location Pin\n\nHere is your property location for your upcoming stay:\nhttps://maps.google.com/?q=23.5880,58.3829\n\nCheck-in: ${new Date(booking.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}\n\nWe look forward to welcoming you!`
+              );
+              window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+            }}
+            className="w-full bg-white border-2 border-secondary-gold text-secondary-gold py-4 rounded-[20px] font-bold text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:bg-secondary-gold/5"
+          >
             <MapPin size={20} />
             Get Location Pin via WhatsApp
-          </button>
-          <button className="w-full bg-white border border-primary-navy/10 text-primary-navy py-4 rounded-[20px] font-bold text-sm active:scale-[0.98] transition-all">
-            View Reservation Details
           </button>
         </div>
 
@@ -112,8 +124,8 @@ export const Confirmation: React.FC = () => {
           A sanctuary of refined luxury in the heart of the desert. Al-Nakheel offers an unparalleled Omani experience blending heritage with elegance.
         </p>
         <div className="flex gap-6 items-center justify-center">
-          <button className="text-xs text-secondary-gold underline font-bold">Terms of Stay</button>
-          <button className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
+          <button onClick={() => navigate('/terms')} className="text-xs text-secondary-gold underline font-bold">Terms of Stay</button>
+          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
         </div>
         <div className="flex gap-8 justify-center">
           <Instagram size={20} className="text-primary-navy/40" />

@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
+import { sendWhatsAppInvoice } from './Invoices';
 import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import type { Property } from '../types';
@@ -249,6 +250,13 @@ export const Booking: React.FC = () => {
         security_deposit: property.security_deposit,
         payment_method: paymentMethod,
         receiptURL,
+      });
+
+      // Trigger WhatsApp invoice (will connect API next)
+      sendWhatsAppInvoice({
+        guest_name: guestName.trim(),
+        guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+        id: result.booking.id,
       });
 
       navigate('/confirmation', {

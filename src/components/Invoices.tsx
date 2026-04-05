@@ -1,284 +1,449 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { CheckCircle2, Hourglass, FileText, Receipt, Maximize, Send, Download, MessageCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { invoicesApi } from '../services/api';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { downloadInvoicePDF, shareInvoiceViaWhatsApp } from '../services/pdf';
+import { generateVATReportPDF } from '../services/vatReport';
 import type { Invoice } from '../types';
 
+interface RealtimeBooking {
+  id: string;
+  property_name: string;
+  guest_name: string;
+  guest_phone: string;
+  check_in: string;
+  check_out: string;
+  nights: number;
+  total_amount: number;
+  nightly_rate: number;
+  status: string;
+  payment_status: string;
+  payment_method: string;
+  created_at: string;
+}
+
 export const Invoices: React.FC = () => {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [stats, setStats] = useState({ outstanding: 0, healthRate: 0, awaitingAction: 0 });
-  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [whatsAppPhone, setWhatsAppPhone] = useState('');
   const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      invoicesApi.list(),
-      invoicesApi.stats(),
-    ]).then(([invoiceData, statsData]) => {
-      setInvoices(invoiceData);
-      setStats(statsData);
-      // Load the first paid+vat_compliant invoice for preview
-      const vatInvoice = invoiceData.find((inv: Invoice) => inv.vat_compliant);
-      if (vatInvoice) {
-        invoicesApi.get(vatInvoice.id).then(setPreviewInvoice);
-      }
-    }).catch(console.error)
-      .finally(() => setLoading(false));
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking));
+      setBookings(data);
+      setLoading(false);
+    }, (error) => {
+      console.error('Bookings listener error:', error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const handleGenerateVAT = async (invoiceId: string) => {
-    try {
-      const updated = await invoicesApi.update(invoiceId, { vat_compliant: true });
-      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, vat_compliant: true } : inv));
-      setPreviewInvoice(updated);
-    } catch (err) {
-      console.error('Failed to update invoice:', err);
-    }
+  // Convert a booking to an Invoice-like object for PDF generation
+  const bookingToInvoice = (b: RealtimeBooking): Invoice => {
+    const subtotal = b.total_amount;
+    const vatAmount = +(subtotal * 0.05).toFixed(2);
+    return {
+      id: b.id,
+      guest_name: b.guest_name,
+      booking_ref: b.id.slice(0, 8).toUpperCase(),
+      room_type: b.property_name,
+      subtotal,
+      vat_amount: vatAmount,
+      total_amount: +(subtotal + vatAmount).toFixed(2),
+      status: b.status === 'confirmed' ? 'paid' : 'pending',
+      vat_compliant: b.status === 'confirmed',
+      issued_date: b.created_at,
+      items: [
+        { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: subtotal },
+      ],
+    };
   };
 
-  const handleApprove = async (invoiceId: string) => {
-    try {
-      await invoicesApi.update(invoiceId, { status: 'paid' });
-      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, status: 'paid' } : inv));
-    } catch (err) {
-      console.error('Failed to approve invoice:', err);
-    }
+  // Determine invoice sent status (confirmed = sent, else pending)
+  const getInvoiceStatus = (b: RealtimeBooking) => {
+    if (b.status === 'confirmed' || b.status === 'checked-in') return 'sent';
+    return 'pending';
   };
 
-  const pendingInvoices = invoices.filter(inv => inv.status === 'pending' || inv.status === 'overdue');
+  // Build last 6 months for VAT reports
+  const getLastSixMonths = () => {
+    const months: { label: string; month: number; year: number }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        month: d.getMonth(),
+        year: d.getFullYear(),
+      });
+    }
+    return months;
+  };
+
+  const getMonthlyConfirmedBookings = (month: number, year: number) => {
+    return bookings.filter(b => {
+      if (b.status === 'cancelled') return false;
+      if (b.status !== 'confirmed' && b.status !== 'checked-in') return false;
+      const d = new Date(b.check_in);
+      return d.getMonth() === month && d.getFullYear() === year;
+    });
+  };
+
+  const handleDownloadVAT = (month: number, year: number, label: string) => {
+    const monthBookings = getMonthlyConfirmedBookings(month, year);
+    const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const vatCollected = +(totalRevenue * 0.05).toFixed(2);
+
+    generateVATReportPDF({
+      month: label,
+      taxId: '1009283746',
+      totalRevenue,
+      vatRate: 5,
+      vatCollected,
+      bookingCount: monthBookings.length,
+      bookings: monthBookings.map(b => ({
+        guest_name: b.guest_name,
+        check_in: b.check_in,
+        nights: b.nights,
+        amount: b.total_amount,
+      })),
+    });
+  };
+
+  const handleViewPDF = (b: RealtimeBooking) => {
+    const invoice = bookingToInvoice(b);
+    setSelectedInvoice(invoice);
+  };
+
+  const handleSendWhatsApp = (b: RealtimeBooking) => {
+    sendWhatsAppInvoice({ guest_name: b.guest_name, guest_phone: b.guest_phone, id: b.id });
+  };
+
+  const nonCancelledBookings = bookings.filter(b => b.status !== 'cancelled');
+  const lastSixMonths = getLastSixMonths();
 
   if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-4xl mx-auto">
-      {/* Summary Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="sm:col-span-2 bg-primary-navy p-6 rounded-[20px] text-white flex flex-col justify-between h-40 shadow-xl shadow-primary-navy/20"
-        >
-          <div>
-            <p className="text-white/60 font-bold text-xs uppercase tracking-widest">Total Outstanding</p>
-            <h2 className="font-headline text-3xl mt-2">OMR {stats.outstanding.toLocaleString('en-US', { minimumFractionDigits: 2 })}</h2>
-          </div>
-          <div className="flex items-center gap-2 text-secondary-gold">
-            <span className="text-xs font-bold">{pendingInvoices.length} invoices pending</span>
-          </div>
-        </motion.div>
+    <div className="p-6 md:p-8 space-y-10 max-w-4xl mx-auto">
+      {/* Page Header */}
+      <div>
+        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Administration</span>
+        <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">Financial Archive</h1>
+        <p className="text-primary-navy/50 text-xs font-medium mt-1">{nonCancelledBookings.length} total invoices generated</p>
+      </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white p-5 rounded-[20px] flex flex-col gap-3 shadow-sm border border-primary-navy/5"
-        >
-          <CheckCircle2 className="text-secondary-gold" size={24} />
-          <div>
-            <p className="text-primary-navy/50 text-[10px] uppercase tracking-wider font-bold">Invoice Health</p>
-            <p className="text-xl font-headline text-primary-navy mt-1">{stats.healthRate}%</p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white p-5 rounded-[20px] flex flex-col gap-3 shadow-sm border border-primary-navy/5"
-        >
-          <Hourglass className="text-primary-navy/60" size={24} />
-          <div>
-            <p className="text-primary-navy/50 text-[10px] uppercase tracking-wider font-bold">Awaiting Action</p>
-            <p className="text-xl font-headline text-primary-navy mt-1">{stats.awaitingAction} Items</p>
-          </div>
-        </motion.div>
-      </section>
-
-      {/* Pending Invoices */}
+      {/* SECTION 1: Latest Booking Invoices */}
       <section className="space-y-4">
         <div className="flex justify-between items-end px-1">
           <div>
-            <h3 className="font-headline text-xl text-primary-navy font-bold">Pending Invoices</h3>
-            <p className="text-primary-navy/50 text-xs font-medium">Awaiting VAT compliance processing</p>
+            <h3 className="font-headline text-lg text-primary-navy font-bold">Latest Booking Invoices</h3>
+            <p className="text-primary-navy/50 text-xs font-medium">Individual invoices from recent bookings</p>
           </div>
-          <button className="text-secondary-gold text-xs font-bold uppercase tracking-widest hover:underline">View All</button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {pendingInvoices.slice(0, 4).map((inv, i) => (
-            <motion.div
-              key={inv.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.1 }}
-              className={cn(
-                "bg-white p-6 rounded-[20px] border-l-4 shadow-sm space-y-4",
-                i === 0 ? "border-secondary-gold" : "border-primary-navy/20"
-              )}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-bold text-primary-navy">{inv.guest_name}</h4>
-                  <p className="text-primary-navy/50 text-xs font-medium">Booking {inv.booking_ref} &bull; {inv.room_type}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-headline text-lg text-primary-navy font-bold">OMR {inv.total_amount.toFixed(2)}</p>
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase",
-                    inv.status === 'overdue' ? "text-red-500" : "text-amber-500"
-                  )}>{inv.status}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => handleGenerateVAT(inv.id)}
-                className="w-full bg-primary-navy py-3 rounded-xl flex items-center justify-center gap-2 text-white font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-transform"
-              >
-                <FileText size={14} />
-                {inv.vat_compliant ? 'VAT Compliant' : 'Generate VAT-Compliant Invoice'}
-              </button>
-            </motion.div>
-          ))}
+        <div className="bg-white rounded-[20px] border border-primary-navy/5 shadow-sm overflow-hidden">
+          {/* Table Header */}
+          <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-surface-container-low border-b border-primary-navy/5">
+            <span className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Guest Name</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Booking ID</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Date</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Amount</span>
+            <span className="col-span-1 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-center">Status</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Actions</span>
+          </div>
+
+          {nonCancelledBookings.length === 0 ? (
+            <p className="text-center text-sm text-primary-navy/40 py-12">No invoices yet</p>
+          ) : (
+            nonCancelledBookings.map((b, i) => {
+              const status = getInvoiceStatus(b);
+              return (
+                <motion.div
+                  key={b.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.03 }}
+                  className={cn(
+                    "px-6 py-4 border-b border-primary-navy/5 last:border-b-0",
+                    "md:grid md:grid-cols-12 md:gap-4 md:items-center",
+                    "flex flex-col gap-3"
+                  )}
+                >
+                  {/* Guest Name */}
+                  <div className="col-span-3">
+                    <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
+                    <p className="text-[10px] text-primary-navy/40 font-medium md:hidden">{b.property_name}</p>
+                  </div>
+
+                  {/* Booking ID */}
+                  <div className="col-span-2">
+                    <span className="text-xs font-mono text-primary-navy/60">{b.id.slice(0, 8).toUpperCase()}</span>
+                  </div>
+
+                  {/* Date */}
+                  <div className="col-span-2">
+                    <span className="text-xs text-primary-navy/60">
+                      {new Date(b.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="col-span-2 text-right">
+                    <span className="font-bold text-primary-navy font-headline">
+                      {b.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-[10px] font-normal">OMR</span>
+                    </span>
+                  </div>
+
+                  {/* Status */}
+                  <div className="col-span-1 text-center">
+                    <span className={cn(
+                      "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full inline-block",
+                      status === 'sent' ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                    )}>
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-2 flex justify-end gap-2">
+                    <button
+                      onClick={() => handleViewPDF(b)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary-navy/10 text-primary-navy/70 hover:bg-primary-navy/5 transition-colors text-[10px] font-bold uppercase tracking-wider"
+                    >
+                      <FileText size={12} />
+                      <span className="hidden sm:inline">View PDF</span>
+                    </button>
+                    <button
+                      onClick={() => handleSendWhatsApp(b)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors text-[10px] font-bold uppercase tracking-wider"
+                    >
+                      <MessageCircle size={12} />
+                      <span className="hidden sm:inline">WhatsApp</span>
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
         </div>
       </section>
 
-      {/* Active Preview */}
-      {previewInvoice && (
-        <section className="space-y-4">
-          <h3 className="font-headline text-xl text-primary-navy font-bold px-1">Active Preview</h3>
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[20px] overflow-hidden shadow-2xl shadow-primary-navy/5 border border-primary-navy/5"
-          >
-            <div className="bg-surface-container-low p-6 border-b border-primary-navy/5 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-navy flex items-center justify-center rounded-lg">
-                  <Receipt className="text-secondary-gold" size={20} />
-                </div>
-                <div>
-                  <p className="font-headline text-sm font-bold">Tax Invoice #{previewInvoice.id.slice(0, 8).toUpperCase()}</p>
-                  <p className="text-[10px] text-primary-navy/50 uppercase tracking-widest font-bold">Digital Draft</p>
-                </div>
-              </div>
-              <button className="p-2 hover:bg-primary-navy/5 rounded-full"><Maximize size={20} className="text-primary-navy/40" /></button>
-            </div>
+      {/* SECTION 2: Monthly VAT Reports */}
+      <section className="space-y-4">
+        <div className="px-1">
+          <h3 className="font-headline text-lg text-primary-navy font-bold">Business Tax Reports</h3>
+          <p className="text-primary-navy/50 text-xs font-medium">Monthly VAT summaries for confirmed bookings</p>
+        </div>
 
-            <div className="p-8 space-y-8 font-body text-sm">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="font-bold text-primary-navy text-base uppercase tracking-tight">AL-NAKHEEL LUXURY PROPERTIES</p>
-                  <p className="text-xs text-primary-navy/50 font-medium">Tax ID: 1009283746</p>
-                  <p className="text-xs text-primary-navy/50 font-medium">Muscat, Sultanate of Oman</p>
-                </div>
-                <div className="text-right text-[10px] uppercase font-bold tracking-widest text-secondary-gold bg-secondary-gold/10 px-2 py-1 rounded">
-                  VAT COMPLIANT
-                </div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {lastSixMonths.map((m, i) => {
+            const monthBookings = getMonthlyConfirmedBookings(m.month, m.year);
+            const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount, 0);
+            const vatCollected = +(totalRevenue * 0.05).toFixed(2);
 
-              <div className="grid grid-cols-2 gap-8 py-6 border-y border-primary-navy/5">
-                <div>
-                  <p className="text-[10px] text-primary-navy/40 uppercase font-bold mb-1 tracking-wider">Billed To</p>
-                  <p className="font-bold text-primary-navy">{previewInvoice.guest_name}</p>
-                  <p className="text-xs text-primary-navy/50 font-medium">{previewInvoice.room_type}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-primary-navy/40 uppercase font-bold mb-1 tracking-wider">Issue Date</p>
-                  <p className="font-bold text-primary-navy">{new Date(previewInvoice.issued_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                </div>
-              </div>
-
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[10px] uppercase font-bold text-primary-navy/40 border-b border-primary-navy/5">
-                    <th className="text-left py-3 font-bold">Description</th>
-                    <th className="text-right py-3 font-bold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="text-primary-navy">
-                  {previewInvoice.items?.map((item, i) => (
-                    <tr key={i}>
-                      <td className="py-4 font-medium">{item.description}</td>
-                      <td className="text-right font-headline font-bold">OMR {item.amount.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  <tr className="border-t border-primary-navy/5">
-                    <td className="pt-6 pb-2 text-[10px] uppercase font-bold text-primary-navy/40">Subtotal</td>
-                    <td className="pt-6 pb-2 text-right font-headline font-bold">OMR {previewInvoice.subtotal.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1 text-[10px] uppercase font-bold text-primary-navy/40">VAT (5%)</td>
-                    <td className="py-1 text-right font-headline font-bold">OMR {previewInvoice.vat_amount.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-4 font-bold text-base">Grand Total</td>
-                    <td className="py-4 text-right font-headline text-xl text-secondary-gold font-bold">OMR {previewInvoice.total_amount.toFixed(2)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-6 bg-surface-container-high space-y-3">
-              <div className="flex gap-3">
-                <button
-                  onClick={() => previewInvoice && downloadInvoicePDF(previewInvoice)}
-                  className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
-                >
-                  <Download size={14} />
-                  Download PDF
-                </button>
-                <button
-                  onClick={() => setShowWhatsApp(!showWhatsApp)}
-                  className="flex-1 border border-emerald-300 bg-emerald-50 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
-                >
-                  <MessageCircle size={14} />
-                  Share via WhatsApp
-                </button>
-              </div>
-
-              {showWhatsApp && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="flex gap-2"
-                >
-                  <div className="bg-white rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60 border border-primary-navy/10">+968</div>
-                  <input
-                    type="text"
-                    value={whatsAppPhone}
-                    onChange={(e) => setWhatsAppPhone(e.target.value.replace(/[^\d]/g, ''))}
-                    placeholder="Guest phone number"
-                    maxLength={8}
-                    className="flex-1 bg-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/30"
-                  />
-                  <button
-                    onClick={() => {
-                      if (previewInvoice && whatsAppPhone.length === 8) {
-                        shareInvoiceViaWhatsApp(previewInvoice, `968${whatsAppPhone}`);
-                      }
-                    }}
-                    disabled={whatsAppPhone.length !== 8}
-                    className="px-5 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase disabled:opacity-50"
-                  >
-                    Send
-                  </button>
-                </motion.div>
-              )}
-
-              <button
-                onClick={() => previewInvoice && handleApprove(previewInvoice.id)}
-                className="w-full bg-primary-navy py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white shadow-lg shadow-primary-navy/20 flex items-center justify-center gap-2"
+            return (
+              <motion.div
+                key={m.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-white rounded-[20px] p-5 border border-primary-navy/5 shadow-sm space-y-4"
               >
-                <Send size={14} />
-                Approve & Send
-              </button>
-            </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={16} className="text-secondary-gold" />
+                    <h4 className="text-sm font-bold text-primary-navy">{m.label}</h4>
+                  </div>
+                  <span className="text-[10px] font-bold text-primary-navy/40">{monthBookings.length} bookings</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-primary-navy/50">Revenue</span>
+                    <span className="font-bold text-primary-navy">{totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })} OMR</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-primary-navy/50">VAT (5%)</span>
+                    <span className="font-bold text-secondary-gold">{vatCollected.toFixed(2)} OMR</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleDownloadVAT(m.month, m.year, m.label)}
+                  disabled={monthBookings.length === 0}
+                  className="w-full flex items-center justify-center gap-2 bg-primary-navy text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Download size={12} />
+                  Download VAT Report
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div className="bg-surface-container-low rounded-xl p-4 flex items-center gap-3">
+          <Building2 size={16} className="text-secondary-gold flex-shrink-0" />
+          <p className="text-[10px] text-primary-navy/50 font-bold">
+            Tax ID: <span className="text-primary-navy">1009283746</span> &bull; VAT Rate: <span className="text-primary-navy">5%</span> &bull; Al-Nakheel Luxury Properties, Muscat, Oman
+          </p>
+        </div>
+      </section>
+
+      {/* Invoice Preview Modal */}
+      <AnimatePresence>
+        {selectedInvoice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => { setSelectedInvoice(null); setShowWhatsApp(false); setWhatsAppPhone(''); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[20px] overflow-hidden shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            >
+              {/* Modal Header */}
+              <div className="bg-surface-container-low p-5 border-b border-primary-navy/5 flex justify-between items-center sticky top-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-navy flex items-center justify-center rounded-lg">
+                    <Receipt className="text-secondary-gold" size={20} />
+                  </div>
+                  <div>
+                    <p className="font-headline text-sm font-bold">Tax Invoice #{selectedInvoice.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-[10px] text-primary-navy/50 uppercase tracking-widest font-bold">Digital Preview</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSelectedInvoice(null); setShowWhatsApp(false); setWhatsAppPhone(''); }}
+                  className="p-2 hover:bg-primary-navy/5 rounded-full"
+                >
+                  <X size={18} className="text-primary-navy/40" />
+                </button>
+              </div>
+
+              {/* Invoice Body */}
+              <div className="p-6 space-y-6 text-sm">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="font-bold text-primary-navy text-base uppercase tracking-tight">AL-NAKHEEL LUXURY PROPERTIES</p>
+                    <p className="text-xs text-primary-navy/50 font-medium">Tax ID: 1009283746</p>
+                    <p className="text-xs text-primary-navy/50 font-medium">Muscat, Sultanate of Oman</p>
+                  </div>
+                  <div className="text-right text-[10px] uppercase font-bold tracking-widest text-secondary-gold bg-secondary-gold/10 px-2 py-1 rounded">
+                    VAT COMPLIANT
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 py-4 border-y border-primary-navy/5">
+                  <div>
+                    <p className="text-[10px] text-primary-navy/40 uppercase font-bold mb-1 tracking-wider">Billed To</p>
+                    <p className="font-bold text-primary-navy">{selectedInvoice.guest_name}</p>
+                    <p className="text-xs text-primary-navy/50 font-medium">{selectedInvoice.room_type}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-primary-navy/40 uppercase font-bold mb-1 tracking-wider">Issue Date</p>
+                    <p className="font-bold text-primary-navy">{new Date(selectedInvoice.issued_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  </div>
+                </div>
+
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[10px] uppercase font-bold text-primary-navy/40 border-b border-primary-navy/5">
+                      <th className="text-left py-3 font-bold">Description</th>
+                      <th className="text-right py-3 font-bold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-primary-navy">
+                    {selectedInvoice.items?.map((item, i) => (
+                      <tr key={i}>
+                        <td className="py-3 font-medium">{item.description}</td>
+                        <td className="text-right font-headline font-bold">OMR {item.amount.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-primary-navy/5">
+                      <td className="pt-4 pb-1 text-[10px] uppercase font-bold text-primary-navy/40">Subtotal</td>
+                      <td className="pt-4 pb-1 text-right font-headline font-bold">OMR {selectedInvoice.subtotal.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1 text-[10px] uppercase font-bold text-primary-navy/40">VAT (5%)</td>
+                      <td className="py-1 text-right font-headline font-bold">OMR {selectedInvoice.vat_amount.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 font-bold text-base">Grand Total</td>
+                      <td className="py-3 text-right font-headline text-xl text-secondary-gold font-bold">OMR {selectedInvoice.total_amount.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="p-5 bg-surface-container-low space-y-3 border-t border-primary-navy/5">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => downloadInvoicePDF(selectedInvoice)}
+                    className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download size={14} />
+                    Download PDF
+                  </button>
+                  <button
+                    onClick={() => setShowWhatsApp(!showWhatsApp)}
+                    className="flex-1 border border-emerald-300 bg-emerald-50 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle size={14} />
+                    Share via WhatsApp
+                  </button>
+                </div>
+
+                {showWhatsApp && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="flex gap-2"
+                  >
+                    <div className="bg-white rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60 border border-primary-navy/10">+968</div>
+                    <input
+                      type="text"
+                      value={whatsAppPhone}
+                      onChange={(e) => setWhatsAppPhone(e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="Guest phone number"
+                      maxLength={8}
+                      className="flex-1 bg-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/30"
+                    />
+                    <button
+                      onClick={() => {
+                        if (selectedInvoice && whatsAppPhone.length === 8) {
+                          shareInvoiceViaWhatsApp(selectedInvoice, `968${whatsAppPhone}`);
+                        }
+                      }}
+                      disabled={whatsAppPhone.length !== 8}
+                      className="px-5 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase disabled:opacity-50"
+                    >
+                      Send
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
           </motion.div>
-        </section>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 };
+
+/** WhatsApp invoice trigger — logs for now, will connect API next */
+export function sendWhatsAppInvoice(bookingData: { guest_name: string; guest_phone?: string; id: string }) {
+  console.log(`Triggering WhatsApp PDF send for ${bookingData.guest_name}...`);
+}
