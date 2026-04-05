@@ -4,7 +4,7 @@ import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2 } fr
 import { cn } from '@/src/lib/utils';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { downloadInvoicePDF, shareInvoiceViaWhatsApp } from '../services/pdf';
+import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
 import type { Invoice } from '../types';
 
@@ -24,12 +24,18 @@ interface RealtimeBooking {
   created_at: string;
 }
 
+/** Format phone to international 968 format */
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/[^\d]/g, '');
+  if (digits.startsWith('968')) return digits;
+  return `968${digits}`;
+}
+
 export const Invoices: React.FC = () => {
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [whatsAppPhone, setWhatsAppPhone] = useState('');
-  const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<RealtimeBooking | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
@@ -44,34 +50,32 @@ export const Invoices: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Convert a booking to an Invoice-like object for PDF generation
+  // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
-    const subtotal = b.total_amount;
-    const vatAmount = +(subtotal * 0.05).toFixed(2);
+    const total = b.total_amount;
     return {
       id: b.id,
       guest_name: b.guest_name,
       booking_ref: b.id.slice(0, 8).toUpperCase(),
       room_type: b.property_name,
-      subtotal,
-      vat_amount: vatAmount,
-      total_amount: +(subtotal + vatAmount).toFixed(2),
+      subtotal: total,
+      vat_amount: 0,
+      total_amount: total,
       status: b.status === 'confirmed' ? 'paid' : 'pending',
-      vat_compliant: b.status === 'confirmed',
+      vat_compliant: false,
       issued_date: b.created_at,
       items: [
-        { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: subtotal },
+        { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: total },
       ],
     };
   };
 
-  // Determine invoice sent status (confirmed = sent, else pending)
   const getInvoiceStatus = (b: RealtimeBooking) => {
     if (b.status === 'confirmed' || b.status === 'checked-in') return 'sent';
     return 'pending';
   };
 
-  // Build last 6 months for VAT reports
+  // Last 6 months for VAT reports
   const getLastSixMonths = () => {
     const months: { label: string; month: number; year: number }[] = [];
     const now = new Date();
@@ -117,12 +121,21 @@ export const Invoices: React.FC = () => {
   };
 
   const handleViewPDF = (b: RealtimeBooking) => {
-    const invoice = bookingToInvoice(b);
-    setSelectedInvoice(invoice);
+    setSelectedInvoice(bookingToInvoice(b));
+    setSelectedBooking(b);
   };
 
   const handleSendWhatsApp = (b: RealtimeBooking) => {
-    sendWhatsAppInvoice({ guest_name: b.guest_name, guest_phone: b.guest_phone, id: b.id });
+    const phone = formatPhone(b.guest_phone);
+    const message = encodeURIComponent(
+      `Assalamu Alaikum ${b.guest_name}, here is your invoice for your stay at Al-Nakheel Sanctuary: [Cloudinary Link]`
+    );
+    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  };
+
+  const closeModal = () => {
+    setSelectedInvoice(null);
+    setSelectedBooking(null);
   };
 
   const nonCancelledBookings = bookings.filter(b => b.status !== 'cancelled');
@@ -141,21 +154,18 @@ export const Invoices: React.FC = () => {
 
       {/* SECTION 1: Latest Booking Invoices */}
       <section className="space-y-4">
-        <div className="flex justify-between items-end px-1">
-          <div>
-            <h3 className="font-headline text-lg text-primary-navy font-bold">Latest Booking Invoices</h3>
-            <p className="text-primary-navy/50 text-xs font-medium">Individual invoices from recent bookings</p>
-          </div>
+        <div className="px-1">
+          <h3 className="font-headline text-lg text-primary-navy font-bold">Latest Booking Invoices</h3>
+          <p className="text-primary-navy/50 text-xs font-medium">Individual invoices from recent bookings</p>
         </div>
 
         <div className="bg-white rounded-[20px] border border-primary-navy/5 shadow-sm overflow-hidden">
           {/* Table Header */}
           <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-surface-container-low border-b border-primary-navy/5">
-            <span className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Guest Name</span>
+            <span className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Guest</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Booking ID</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Date</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Amount</span>
-            <span className="col-span-1 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-center">Status</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Actions</span>
           </div>
 
@@ -171,61 +181,60 @@ export const Invoices: React.FC = () => {
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.03 }}
                   className={cn(
-                    "px-6 py-4 border-b border-primary-navy/5 last:border-b-0",
+                    "px-6 py-4 border-b border-primary-navy/5 last:border-b-0 transition-colors hover:bg-primary-navy/[0.02] cursor-default",
                     "md:grid md:grid-cols-12 md:gap-4 md:items-center",
                     "flex flex-col gap-3"
                   )}
                 >
-                  {/* Guest Name */}
-                  <div className="col-span-3">
+                  {/* Guest Name + Status Badge */}
+                  <div className="col-span-4">
                     <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
-                    <p className="text-[10px] text-primary-navy/40 font-medium md:hidden">{b.property_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={cn(
+                        "text-[8px] font-bold uppercase px-2 py-0.5 rounded-full",
+                        status === 'sent' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                      )}>
+                        {status}
+                      </span>
+                      <span className="text-[10px] text-primary-navy/40 font-medium md:hidden">{b.property_name}</span>
+                    </div>
                   </div>
 
                   {/* Booking ID */}
                   <div className="col-span-2">
-                    <span className="text-xs font-mono text-primary-navy/60">{b.id.slice(0, 8).toUpperCase()}</span>
+                    <span className="text-xs font-mono text-primary-navy/50">{b.id.slice(0, 8).toUpperCase()}</span>
                   </div>
 
                   {/* Date */}
                   <div className="col-span-2">
-                    <span className="text-xs text-primary-navy/60">
+                    <span className="text-xs text-primary-navy/50">
                       {new Date(b.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
 
-                  {/* Amount */}
+                  {/* Amount — bold, right-aligned */}
                   <div className="col-span-2 text-right">
-                    <span className="font-bold text-primary-navy font-headline">
-                      {b.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-[10px] font-normal">OMR</span>
+                    <span className="font-bold text-primary-navy font-headline text-sm">
+                      {b.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
+                    <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
                   </div>
 
-                  {/* Status */}
-                  <div className="col-span-1 text-center">
-                    <span className={cn(
-                      "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full inline-block",
-                      status === 'sent' ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-                    )}>
-                      {status}
-                    </span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="col-span-2 flex justify-end gap-2">
+                  {/* Actions — icon-only buttons */}
+                  <div className="col-span-2 flex justify-end gap-1.5">
                     <button
                       onClick={() => handleViewPDF(b)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary-navy/10 text-primary-navy/70 hover:bg-primary-navy/5 transition-colors text-[10px] font-bold uppercase tracking-wider"
+                      title="View Invoice PDF"
+                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-primary-navy/10 text-primary-navy/50 hover:text-primary-navy hover:border-primary-navy/20 hover:bg-primary-navy/5 transition-all"
                     >
-                      <FileText size={12} />
-                      <span className="hidden sm:inline">View PDF</span>
+                      <FileText size={15} />
                     </button>
                     <button
                       onClick={() => handleSendWhatsApp(b)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors text-[10px] font-bold uppercase tracking-wider"
+                      title="Send via WhatsApp"
+                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-emerald-200 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 transition-all"
                     >
-                      <MessageCircle size={12} />
-                      <span className="hidden sm:inline">WhatsApp</span>
+                      <MessageCircle size={15} />
                     </button>
                   </div>
                 </motion.div>
@@ -254,7 +263,7 @@ export const Invoices: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="bg-white rounded-[20px] p-5 border border-primary-navy/5 shadow-sm space-y-4"
+                className="bg-white rounded-[20px] p-5 border border-primary-navy/5 shadow-sm space-y-4 hover:border-primary-navy/10 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -296,7 +305,7 @@ export const Invoices: React.FC = () => {
         </div>
       </section>
 
-      {/* Invoice Preview Modal */}
+      {/* Invoice Preview Modal — only opens when a specific invoice is selected */}
       <AnimatePresence>
         {selectedInvoice && (
           <motion.div
@@ -304,7 +313,7 @@ export const Invoices: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={() => { setSelectedInvoice(null); setShowWhatsApp(false); setWhatsAppPhone(''); }}
+            onClick={closeModal}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -314,34 +323,27 @@ export const Invoices: React.FC = () => {
               className="bg-white rounded-[20px] overflow-hidden shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
             >
               {/* Modal Header */}
-              <div className="bg-surface-container-low p-5 border-b border-primary-navy/5 flex justify-between items-center sticky top-0">
+              <div className="bg-surface-container-low p-5 border-b border-primary-navy/5 flex justify-between items-center sticky top-0 z-10">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary-navy flex items-center justify-center rounded-lg">
                     <Receipt className="text-secondary-gold" size={20} />
                   </div>
                   <div>
-                    <p className="font-headline text-sm font-bold">Tax Invoice #{selectedInvoice.id.slice(0, 8).toUpperCase()}</p>
-                    <p className="text-[10px] text-primary-navy/50 uppercase tracking-widest font-bold">Digital Preview</p>
+                    <p className="font-headline text-sm font-bold">Invoice #{selectedInvoice.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-[10px] text-primary-navy/50 uppercase tracking-widest font-bold">Guest Invoice</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setSelectedInvoice(null); setShowWhatsApp(false); setWhatsAppPhone(''); }}
-                  className="p-2 hover:bg-primary-navy/5 rounded-full"
-                >
+                <button onClick={closeModal} className="p-2 hover:bg-primary-navy/5 rounded-full transition-colors">
                   <X size={18} className="text-primary-navy/40" />
                 </button>
               </div>
 
-              {/* Invoice Body */}
+              {/* Invoice Body — NO VAT for guest invoices */}
               <div className="p-6 space-y-6 text-sm">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="font-bold text-primary-navy text-base uppercase tracking-tight">AL-NAKHEEL LUXURY PROPERTIES</p>
-                    <p className="text-xs text-primary-navy/50 font-medium">Tax ID: 1009283746</p>
                     <p className="text-xs text-primary-navy/50 font-medium">Muscat, Sultanate of Oman</p>
-                  </div>
-                  <div className="text-right text-[10px] uppercase font-bold tracking-widest text-secondary-gold bg-secondary-gold/10 px-2 py-1 rounded">
-                    VAT COMPLIANT
                   </div>
                 </div>
 
@@ -372,16 +374,8 @@ export const Invoices: React.FC = () => {
                       </tr>
                     ))}
                     <tr className="border-t border-primary-navy/5">
-                      <td className="pt-4 pb-1 text-[10px] uppercase font-bold text-primary-navy/40">Subtotal</td>
-                      <td className="pt-4 pb-1 text-right font-headline font-bold">OMR {selectedInvoice.subtotal.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 text-[10px] uppercase font-bold text-primary-navy/40">VAT (5%)</td>
-                      <td className="py-1 text-right font-headline font-bold">OMR {selectedInvoice.vat_amount.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 font-bold text-base">Grand Total</td>
-                      <td className="py-3 text-right font-headline text-xl text-secondary-gold font-bold">OMR {selectedInvoice.total_amount.toFixed(2)}</td>
+                      <td className="py-4 font-bold text-base">Grand Total</td>
+                      <td className="py-4 text-right font-headline text-xl text-secondary-gold font-bold">OMR {selectedInvoice.total_amount.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -397,43 +391,16 @@ export const Invoices: React.FC = () => {
                     <Download size={14} />
                     Download PDF
                   </button>
-                  <button
-                    onClick={() => setShowWhatsApp(!showWhatsApp)}
-                    className="flex-1 border border-emerald-300 bg-emerald-50 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <MessageCircle size={14} />
-                    Share via WhatsApp
-                  </button>
-                </div>
-
-                {showWhatsApp && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="flex gap-2"
-                  >
-                    <div className="bg-white rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60 border border-primary-navy/10">+968</div>
-                    <input
-                      type="text"
-                      value={whatsAppPhone}
-                      onChange={(e) => setWhatsAppPhone(e.target.value.replace(/[^\d]/g, ''))}
-                      placeholder="Guest phone number"
-                      maxLength={8}
-                      className="flex-1 bg-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/30"
-                    />
+                  {selectedBooking && (
                     <button
-                      onClick={() => {
-                        if (selectedInvoice && whatsAppPhone.length === 8) {
-                          shareInvoiceViaWhatsApp(selectedInvoice, `968${whatsAppPhone}`);
-                        }
-                      }}
-                      disabled={whatsAppPhone.length !== 8}
-                      className="px-5 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase disabled:opacity-50"
+                      onClick={() => handleSendWhatsApp(selectedBooking)}
+                      className="flex-1 border border-emerald-300 bg-emerald-50 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
                     >
-                      Send
+                      <MessageCircle size={14} />
+                      Send via WhatsApp
                     </button>
-                  </motion.div>
-                )}
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>
