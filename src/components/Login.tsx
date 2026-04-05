@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, LogIn, UserPlus, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, UserPlus, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '@/src/lib/utils';
 
 export const Login: React.FC = () => {
+  const navigate = useNavigate();
   const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
@@ -45,6 +47,14 @@ export const Login: React.FC = () => {
           <h1 className="text-4xl font-bold font-headline text-white tracking-tight">Al-Nakheel</h1>
           <p className="text-white/40 text-[10px] uppercase tracking-[0.3em] font-bold mt-2">Luxury Desert Sanctuary</p>
         </div>
+
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm font-medium mb-6"
+        >
+          <ArrowLeft size={18} />
+          Back to Home
+        </button>
 
         <div className="bg-white rounded-[28px] p-8 shadow-2xl">
           <div className="flex gap-2 mb-8 bg-pearl-white rounded-xl p-1">

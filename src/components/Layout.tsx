@@ -12,6 +12,7 @@ import {
   CheckCheck,
   CreditCard,
   CalendarPlus,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -126,6 +127,13 @@ export const Layout: React.FC = () => {
         </nav>
 
         <div className="mt-auto space-y-4 pt-6 border-t border-white/10">
+          <button
+            onClick={() => navigate('/admin/edit-property')}
+            className="flex items-center gap-3 text-white/60 text-xs font-bold uppercase tracking-wider hover:text-secondary-gold transition-colors"
+          >
+            <Settings size={16} />
+            <span className="text-sm">Edit Property</span>
+          </button>
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-3 text-white/60 text-xs font-bold uppercase tracking-wider hover:text-secondary-gold transition-colors"

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Star, Send, ArrowLeft, MessageSquare } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { testimonialsApi, propertiesApi } from '../services/api';
+import { testimonialsApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 interface Testimonial {
@@ -23,12 +23,10 @@ export const Testimonials: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
-
   const [form, setForm] = useState({
     guest_name: '',
     guest_phone: '',
-    property_name: '',
+    property_name: 'Al-Nakheel Sanctuary',
     rating: 0,
     text: '',
     stay_details: '',
@@ -36,13 +34,9 @@ export const Testimonials: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    Promise.all([
-      testimonialsApi.list(),
-      propertiesApi.list(),
-    ]).then(([t, p]) => {
-      setTestimonials(t);
-      setProperties(p);
-    }).catch(console.error)
+    testimonialsApi.list()
+      .then(t => setTestimonials(t))
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
@@ -50,7 +44,6 @@ export const Testimonials: React.FC = () => {
     const errs: Record<string, string> = {};
     if (!form.guest_name.trim()) errs.guest_name = 'Name is required';
     if (!form.guest_phone.trim()) errs.guest_phone = 'Phone is required';
-    if (!form.property_name) errs.property_name = 'Please select a property';
     if (form.rating === 0) errs.rating = 'Please select a rating';
     if (!form.text.trim()) errs.text = 'Please share your experience';
     setErrors(errs);
@@ -66,7 +59,7 @@ export const Testimonials: React.FC = () => {
       setTestimonials(prev => [newT as Testimonial, ...prev]);
       setSubmitted(true);
       setShowForm(false);
-      setForm({ guest_name: '', guest_phone: '', property_name: '', rating: 0, text: '', stay_details: '' });
+      setForm({ guest_name: '', guest_phone: '', property_name: 'Al-Nakheel Sanctuary', rating: 0, text: '', stay_details: '' });
     } catch (err) {
       console.error('Failed to submit:', err);
     } finally {
@@ -142,19 +135,6 @@ export const Testimonials: React.FC = () => {
               />
             </div>
             {errors.guest_phone && <p className="text-red-500 text-xs">{errors.guest_phone}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Property *</label>
-            <select
-              value={form.property_name}
-              onChange={(e) => setForm(p => ({ ...p, property_name: e.target.value }))}
-              className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", errors.property_name ? "border-red-300" : "border-transparent")}
-            >
-              <option value="">Select property...</option>
-              {properties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-            {errors.property_name && <p className="text-red-500 text-xs">{errors.property_name}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -244,14 +224,9 @@ export const Testimonials: React.FC = () => {
               transition={{ delay: i * 0.1 }}
               className="bg-white p-6 rounded-[20px] border-l-4 border-secondary-gold shadow-sm space-y-3"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary-navy/10 flex items-center justify-center overflow-hidden">
-                  <img src={`https://i.pravatar.cc/150?u=${t.guest_name}`} alt={t.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-primary-navy">{t.guest_name}</h4>
-                  <p className="text-[10px] text-primary-navy/50 font-medium">{t.property_name} {t.stay_details && `\u2022 ${t.stay_details}`}</p>
-                </div>
+              <div>
+                <h4 className="text-sm font-bold text-primary-navy">{t.guest_name}</h4>
+                <p className="text-[10px] text-primary-navy/50 font-medium">{t.property_name} {t.stay_details && `\u2022 ${t.stay_details}`}</p>
               </div>
               <p className="text-sm italic text-primary-navy/80 leading-relaxed">"{t.text}"</p>
               <div className="flex text-secondary-gold">

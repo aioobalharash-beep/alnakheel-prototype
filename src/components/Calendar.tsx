@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, PlusCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -237,9 +237,6 @@ export const Calendar: React.FC = () => {
               className="bg-white rounded-xl p-4 flex items-center justify-between group active:bg-primary-navy/5 transition-colors border border-primary-navy/5 shadow-sm"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-navy/5">
-                  <img src={`https://i.pravatar.cc/150?u=${arrival.guest_name}`} alt={arrival.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
                 <div>
                   <p className="font-bold text-sm text-primary-navy">{arrival.guest_name}</p>
                   <p className="text-xs text-primary-navy/40 font-medium">
@@ -294,9 +291,6 @@ export const Calendar: React.FC = () => {
         </div>
       </section>
 
-      <button className="fixed bottom-24 right-6 w-14 h-14 bg-primary-navy text-white rounded-2xl shadow-2xl flex items-center justify-center active:scale-95 transition-transform z-40">
-        <PlusCircle size={24} />
-      </button>
     </div>
   );
 };

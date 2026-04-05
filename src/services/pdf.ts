@@ -24,17 +24,9 @@ export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
-  doc.text('Tax ID: 1009283746  |  Muscat, Sultanate of Oman', 20, y);
+  doc.text('Muscat, Sultanate of Oman', 20, y);
   y += 4;
   doc.text('CR: 1234567  |  Tourism License: TL-889', 20, y);
-
-  // VAT badge
-  doc.setFillColor(212, 175, 55);
-  doc.roundedRect(pageWidth - 55, 15, 40, 12, 2, 2, 'F');
-  doc.setTextColor(255);
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'bold');
-  doc.text('VAT COMPLIANT', pageWidth - 53, 23);
 
   y += 15;
   doc.setDrawColor(230);
@@ -45,10 +37,10 @@ export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
   doc.setTextColor(1, 31, 54);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(`TAX INVOICE`, 20, y);
+  doc.text(`INVOICE`, 20, y);
   doc.setFontSize(10);
   doc.setTextColor(100);
-  doc.text(`#${invoice.id.slice(0, 8).toUpperCase()}`, 75, y);
+  doc.text(`#${invoice.id.slice(0, 8).toUpperCase()}`, 55, y);
   y += 14;
 
   // Billed To / Date
@@ -107,23 +99,9 @@ export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
   y += 4;
   doc.setDrawColor(230);
   doc.line(20, y, pageWidth - 20, y);
-  y += 10;
-
-  // Totals
-  doc.setFontSize(9);
-  doc.setTextColor(150);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Subtotal', 20, y);
-  doc.setTextColor(1, 31, 54);
-  doc.text(`OMR ${invoice.subtotal.toFixed(2)}`, pageWidth - 55, y);
-  y += 8;
-
-  doc.setTextColor(150);
-  doc.text('VAT (5%)', 20, y);
-  doc.setTextColor(1, 31, 54);
-  doc.text(`OMR ${invoice.vat_amount.toFixed(2)}`, pageWidth - 55, y);
   y += 12;
 
+  // Grand Total (no VAT on guest invoices)
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(1, 31, 54);
@@ -144,21 +122,4 @@ export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
 export function downloadInvoicePDF(invoice: InvoiceData) {
   const doc = generateInvoicePDF(invoice);
   doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
-}
-
-export function shareInvoiceViaWhatsApp(invoice: InvoiceData, phone: string) {
-  const cleanPhone = phone.replace(/[\s+]/g, '');
-  const message = encodeURIComponent(
-    `Al-Nakheel Luxury Properties\n` +
-    `━━━━━━━━━━━━━━━━\n` +
-    `Tax Invoice #${invoice.id.slice(0, 8).toUpperCase()}\n\n` +
-    `Guest: ${invoice.guest_name}\n` +
-    `Property: ${invoice.room_type}\n` +
-    `Date: ${new Date(invoice.issued_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}\n\n` +
-    `Subtotal: OMR ${invoice.subtotal.toFixed(2)}\n` +
-    `VAT (5%): OMR ${invoice.vat_amount.toFixed(2)}\n` +
-    `*Total: OMR ${invoice.total_amount.toFixed(2)}*\n\n` +
-    `Thank you for choosing Al-Nakheel.`
-  );
-  window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
 }

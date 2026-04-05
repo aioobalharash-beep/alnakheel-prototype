@@ -12,6 +12,9 @@ import { Booking } from './components/Booking';
 import { Confirmation } from './components/Confirmation';
 import { Login } from './components/Login';
 import { Testimonials } from './components/Testimonials';
+import { Terms } from './components/Terms';
+import { About } from './components/About';
+import { PropertyEditor } from './components/PropertyEditor';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -43,6 +46,8 @@ function AppRoutes() {
         <Route index element={<Sanctuary />} />
         <Route path="booking" element={<Booking />} />
         <Route path="testimonials" element={<Testimonials />} />
+        <Route path="terms" element={<Terms />} />
+        <Route path="about" element={<About />} />
         <Route path="confirmation" element={<Confirmation />} />
       </Route>
 
@@ -56,6 +61,7 @@ function AppRoutes() {
         <Route path="guests" element={<Guests />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="edit-property" element={<PropertyEditor />} />
       </Route>
 
       {/* Fallback */}
