@@ -10,125 +10,176 @@ interface VATReportData {
   bookings: { guest_name: string; check_in: string; nights: number; amount: number }[];
 }
 
+// Navy: rgb(1, 31, 54)  |  Gold: rgb(212, 175, 55)
+
 export function generateVATReportPDF(data: VATReportData) {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 20;
+  const doc = new jsPDF({ format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth();   // ~210
+  const ph = doc.internal.pageSize.getHeight();   // ~297
+  const ml = 20;  // margin left
+  const mr = pw - 20; // margin right
+  let y = 24;
 
-  // Header
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
+  // ── HEADER ──────────────────────────────────────────────
+  // Business name — serif
+  doc.setFont('times', 'bold');
+  doc.setFontSize(22);
   doc.setTextColor(1, 31, 54);
-  doc.text('AL-NAKHEEL LUXURY PROPERTIES', 20, y);
+  doc.text('Al-Nakheel Luxury Properties', ml, y);
+
+  // Tax ID + location — sans-serif
   y += 8;
-  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  doc.text(`Tax ID: ${data.taxId}  |  Muscat, Sultanate of Oman`, 20, y);
-  y += 4;
-  doc.text('CR: 1234567  |  Tourism License: TL-889', 20, y);
+  doc.setFontSize(9);
+  doc.setTextColor(80);
+  doc.text(`Tax ID: ${data.taxId}`, ml, y);
+  doc.text('Muscat, Sultanate of Oman', mr, y, { align: 'right' });
 
-  // Title badge
-  doc.setFillColor(1, 31, 54);
-  doc.roundedRect(pageWidth - 70, 15, 55, 14, 2, 2, 'F');
-  doc.setTextColor(212, 175, 55);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text('VAT REPORT', pageWidth - 65, 24);
+  // Thin navy rule
+  y += 6;
+  doc.setDrawColor(1, 31, 54);
+  doc.setLineWidth(0.3);
+  doc.line(ml, y, mr, y);
 
-  y += 16;
-  doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
+  // ── REPORT TITLE ────────────────────────────────────────
   y += 14;
-
-  // Report Title
-  doc.setTextColor(1, 31, 54);
+  doc.setFont('times', 'bold');
   doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Monthly VAT Summary`, 20, y);
-  y += 8;
-  doc.setFontSize(12);
+  doc.setTextColor(1, 31, 54);
+  doc.text(`Monthly VAT Summary — ${data.month}`, ml, y);
+
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text(data.month, 20, y);
+  doc.text(`${data.bookingCount} confirmed booking${data.bookingCount !== 1 ? 's' : ''} in this period`, ml, y);
+
+  // ── TABLE ───────────────────────────────────────────────
   y += 16;
 
-  // Summary Box
-  doc.setFillColor(245, 245, 248);
-  doc.roundedRect(20, y, pageWidth - 40, 40, 3, 3, 'F');
+  const col1 = ml;       // Guest Name
+  const col2 = 95;       // Check-in
+  const col3 = 135;      // Nights
+  const col4 = mr;       // Amount (right-aligned)
 
-  doc.setFontSize(8);
-  doc.setTextColor(150);
+  // Table header
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL REVENUE', 30, y + 12);
-  doc.text('VAT RATE', 90, y + 12);
-  doc.text('VAT COLLECTED', 140, y + 12);
-
-  doc.setFontSize(14);
+  doc.setFontSize(8);
   doc.setTextColor(1, 31, 54);
-  doc.text(`OMR ${data.totalRevenue.toFixed(2)}`, 30, y + 26);
-  doc.text(`${data.vatRate}%`, 90, y + 26);
-  doc.setTextColor(212, 175, 55);
-  doc.text(`OMR ${data.vatCollected.toFixed(2)}`, 140, y + 26);
+  doc.text('GUEST NAME', col1, y);
+  doc.text('CHECK-IN', col2, y);
+  doc.text('NIGHTS', col3, y);
+  doc.text('AMOUNT (OMR)', col4, y, { align: 'right' });
 
-  y += 54;
+  y += 3;
+  doc.setDrawColor(1, 31, 54);
+  doc.setLineWidth(0.3);
+  doc.line(ml, y, mr, y);
+  y += 7;
 
-  // Bookings table header
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.setFont('helvetica', 'bold');
-  doc.text('GUEST', 20, y);
-  doc.text('CHECK-IN', 90, y);
-  doc.text('NIGHTS', 130, y);
-  doc.text('AMOUNT (OMR)', pageWidth - 55, y);
-  y += 4;
-  doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
-  y += 8;
-
-  // Bookings rows
-  doc.setFontSize(9);
+  // Table rows
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(1, 31, 54);
-
-  for (const b of data.bookings) {
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.setFont('helvetica', 'normal');
-    doc.text(b.guest_name, 20, y);
-    doc.text(new Date(b.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), 90, y);
-    doc.text(String(b.nights), 135, y);
-    doc.setFont('helvetica', 'bold');
-    doc.text(b.amount.toFixed(2), pageWidth - 55, y);
-    y += 8;
-  }
+  doc.setFontSize(9);
 
   if (data.bookings.length === 0) {
-    doc.setTextColor(150);
-    doc.text('No confirmed bookings for this period.', 20, y);
-    y += 8;
+    doc.setTextColor(140);
+    doc.text('No confirmed bookings for this period.', ml, y);
+    y += 10;
+  } else {
+    for (let i = 0; i < data.bookings.length; i++) {
+      const b = data.bookings[i];
+
+      // Page break check — leave room for summary + footer
+      if (y > ph - 80) {
+        // footer on current page
+        drawFooter(doc, pw, ph);
+        doc.addPage();
+        y = 24;
+      }
+
+      // Alternating subtle guide line (thin, light)
+      if (i > 0) {
+        doc.setDrawColor(210);
+        doc.setLineWidth(0.15);
+        doc.line(ml, y - 5, mr, y - 5);
+      }
+
+      doc.setTextColor(1, 31, 54);
+      doc.setFont('helvetica', 'normal');
+      doc.text(b.guest_name, col1, y);
+      doc.text(
+        new Date(b.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        col2, y
+      );
+      doc.text(String(b.nights), col3 + 6, y, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.text(b.amount.toFixed(2), col4, y, { align: 'right' });
+      y += 9;
+    }
   }
 
-  y += 6;
-  doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
-  y += 10;
+  // Bottom table rule
+  y += 2;
+  doc.setDrawColor(1, 31, 54);
+  doc.setLineWidth(0.3);
+  doc.line(ml, y, mr, y);
 
-  // Total row
-  doc.setFontSize(11);
+  // ── SUMMARY BOX (right-aligned) ─────────────────────────
+  y += 14;
+  const boxW = 80;
+  const boxX = mr - boxW;
+
+  // Revenue
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(80);
+  doc.text('Revenue', boxX, y);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(1, 31, 54);
-  doc.text(`Total: ${data.bookingCount} bookings`, 20, y);
-  doc.setTextColor(212, 175, 55);
-  doc.text(`VAT: OMR ${data.vatCollected.toFixed(2)}`, pageWidth - 55, y);
+  doc.text(`OMR ${data.totalRevenue.toFixed(2)}`, mr, y, { align: 'right' });
 
-  // Footer
-  const footerY = doc.internal.pageSize.getHeight() - 20;
-  doc.setFontSize(7);
-  doc.setTextColor(180);
+  y += 8;
   doc.setFont('helvetica', 'normal');
-  doc.text('Al-Nakheel Luxury Properties  |  This is a computer-generated VAT summary report.', pageWidth / 2, footerY, { align: 'center' });
+  doc.setTextColor(80);
+  doc.text('VAT Rate', boxX, y);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(1, 31, 54);
+  doc.text(`${data.vatRate}%`, mr, y, { align: 'right' });
+
+  // Thin separator
+  y += 5;
+  doc.setDrawColor(1, 31, 54);
+  doc.setLineWidth(0.2);
+  doc.line(boxX, y, mr, y);
+
+  // Total VAT Collected — gold accent
+  y += 9;
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text('Total VAT Collected', boxX, y);
+  doc.setFontSize(12);
+  doc.setTextColor(212, 175, 55);
+  doc.text(`OMR ${data.vatCollected.toFixed(2)}`, mr, y, { align: 'right' });
+
+  // ── FOOTER ──────────────────────────────────────────────
+  drawFooter(doc, pw, ph);
 
   doc.save(`Al-Nakheel-VAT-Report-${data.month.replace(/\s/g, '-')}.pdf`);
+}
+
+function drawFooter(doc: jsPDF, pw: number, ph: number) {
+  const footerY = ph - 16;
+  // Thin rule above footer
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.15);
+  doc.line(20, footerY - 4, pw - 20, footerY - 4);
+  // Footer text
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(160);
+  doc.text(
+    'Al-Nakheel Luxury Properties: This is a computer-generated VAT summary report.',
+    pw / 2, footerY, { align: 'center' }
+  );
 }
