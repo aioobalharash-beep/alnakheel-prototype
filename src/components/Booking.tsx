@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload,
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import type { Property } from '../types';
 
@@ -23,6 +23,9 @@ export const Booking: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'thawani' | 'bank_transfer'>('thawani');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptFileName, setReceiptFileName] = useState('');
+
+  // Upload progress
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -168,6 +171,77 @@ export const Booking: React.FC = () => {
     setErrors(prev => ({ ...prev, receipt: '' }));
   };
 
+  // Compress image via Canvas — max 1000px width, max ~500KB
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      // PDFs can't be compressed via canvas — pass through
+      if (file.type === 'application/pdf') {
+        resolve(file);
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const maxWidth = 1000;
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(file); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Start at quality 0.8 and step down if needed to hit ~500KB
+        let quality = 0.8;
+        const tryCompress = () => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) { resolve(file); return; }
+              if (blob.size > 500 * 1024 && quality > 0.3) {
+                quality -= 0.1;
+                tryCompress();
+              } else {
+                resolve(blob);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        tryCompress();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+      img.src = url;
+    });
+  };
+
+  // Upload with progress tracking
+  const uploadWithProgress = (file: Blob, path: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const storageRef = ref(storage, path);
+      const task = uploadBytesResumable(storageRef, file);
+
+      task.on('state_changed',
+        (snap) => {
+          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+          setUploadProgress(pct);
+        },
+        (err) => { setUploadProgress(null); reject(err); },
+        async () => {
+          const url = await getDownloadURL(task.snapshot.ref);
+          setUploadProgress(null);
+          resolve(url);
+        }
+      );
+    });
+  };
+
   const handleSubmit = async () => {
     if (!validate() || !property || !selectedDates.start || !selectedDates.end) return;
 
@@ -178,14 +252,14 @@ export const Booking: React.FC = () => {
     const checkOut = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
 
     try {
-      // Upload receipt to Firebase Storage if bank transfer
+      // Compress + upload receipt to Firebase Storage if bank transfer
       let receiptURL: string | undefined;
       if (paymentMethod === 'bank_transfer' && receiptFile) {
+        const compressed = await compressImage(receiptFile);
         const timestamp = Date.now();
-        const safeName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const storageRef = ref(storage, `receipts/${timestamp}_${safeName}`);
-        const snapshot = await uploadBytes(storageRef, receiptFile);
-        receiptURL = await getDownloadURL(snapshot.ref);
+        const ext = receiptFile.type === 'application/pdf' ? '.pdf' : '.jpg';
+        const safeName = receiptFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        receiptURL = await uploadWithProgress(compressed, `receipts/${timestamp}_${safeName}${ext}`);
       }
 
       const result = await bookingsApi.create({
@@ -536,13 +610,39 @@ export const Booking: React.FC = () => {
       )}
 
       <div className="space-y-4 pt-4">
+        {/* Upload Progress Bar */}
+        {uploadProgress !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-2"
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/60">Uploading Receipt</span>
+              <span className="text-xs font-bold text-secondary-gold">{uploadProgress}%</span>
+            </div>
+            <div className="w-full h-2 bg-primary-navy/10 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-secondary-gold rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${uploadProgress}%` }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+              />
+            </div>
+          </motion.div>
+        )}
+
         <button
           onClick={handleSubmit}
           disabled={submitting || nights === 0 || maintenanceMode}
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            uploadProgress !== null ? (
+              <span className="text-xs">Uploading Receipt...</span>
+            ) : (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            )
           ) : paymentMethod === 'bank_transfer' ? (
             <>
               Submit Booking
