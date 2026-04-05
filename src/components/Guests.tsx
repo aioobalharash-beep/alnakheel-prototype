@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { motion } from 'motion/react';
-import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
-import { propertiesApi, bookingsApi } from '../services/api';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { propertiesApi } from '../services/api';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { firestoreBookings } from '../services/firestore';
 import type { Property } from '../types';
 
-type DisplayStatus = 'pending' | 'upcoming' | 'in-progress' | 'completed';
+type DisplayStatus = 'pending' | 'upcoming' | 'checked-in' | 'completed';
 
 interface BookingGuest {
   id: string;
@@ -25,6 +26,7 @@ interface BookingGuest {
   payment_status: string;
   payment_method: string;
   created_at: string;
+  isPinned: boolean;
   displayStatus: DisplayStatus;
 }
 
@@ -40,14 +42,14 @@ function computeDisplayStatus(booking: { status: string; check_in: string; check
   checkOut.setHours(0, 0, 0, 0);
 
   if (today < checkIn) return 'upcoming';
-  if (today >= checkIn && today <= checkOut) return 'in-progress';
+  if (today >= checkIn && today <= checkOut) return 'checked-in';
   return 'completed';
 }
 
 const STATUS_CONFIG: Record<DisplayStatus, { label: string; badgeClass: string }> = {
   'pending': { label: 'Pending Approval', badgeClass: 'bg-amber-50 text-amber-700' },
   'upcoming': { label: 'Upcoming', badgeClass: 'bg-blue-50 text-blue-700' },
-  'in-progress': { label: 'Stay in Progress', badgeClass: 'bg-emerald-50 text-emerald-700' },
+  'checked-in': { label: 'Checked In', badgeClass: 'bg-emerald-50 text-emerald-700' },
   'completed': { label: 'Completed', badgeClass: 'bg-gray-100 text-gray-500' },
 };
 
@@ -61,13 +63,18 @@ export const Guests: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | DisplayStatus>('all');
 
+  // Cancel confirmation
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Add guest modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [addSubmitting, setAddSubmitting] = useState(false);
 
-  // Real-time bookings from Firestore — single source of truth
+  // Real-time bookings from Firestore
   useEffect(() => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -89,6 +96,7 @@ export const Guests: React.FC = () => {
             payment_status: data.payment_status || 'pending',
             payment_method: data.payment_method || '',
             created_at: data.created_at || '',
+            isPinned: data.isPinned === true,
             displayStatus: computeDisplayStatus({
               status: data.status,
               check_in: data.check_in,
@@ -107,7 +115,7 @@ export const Guests: React.FC = () => {
     propertiesApi.list().then(setProperties).catch(console.error);
   }, []);
 
-  // Filtered + searched guest list
+  // Filtered, searched, and sorted guest list
   const guests = useMemo(() => {
     let list = rawBookings;
     if (activeFilter !== 'all') {
@@ -119,27 +127,57 @@ export const Guests: React.FC = () => {
         g.guest_name.toLowerCase().includes(s) || g.guest_phone.includes(s)
       );
     }
-    return list;
+    // Sort: pinned first, then by check-in ascending
+    return [...list].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return a.check_in.localeCompare(b.check_in);
+    });
   }, [rawBookings, activeFilter, searchQuery]);
 
-  // Stats computed from real-time data
   const stats = useMemo(() => ({
     pending: rawBookings.filter(g => g.displayStatus === 'pending').length,
     upcoming: rawBookings.filter(g => g.displayStatus === 'upcoming').length,
-    inProgress: rawBookings.filter(g => g.displayStatus === 'in-progress').length,
+    checkedIn: rawBookings.filter(g => g.displayStatus === 'checked-in').length,
     completed: rawBookings.filter(g => g.displayStatus === 'completed').length,
   }), [rawBookings]);
 
-  // Scroll to highlighted guest when data loads
+  // Scroll to highlighted guest
   useEffect(() => {
     if (!loading && highlightName && highlightedRef.current) {
       highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const timer = setTimeout(() => {
-        setSearchParams({}, { replace: true });
-      }, 3000);
+      const timer = setTimeout(() => setSearchParams({}, { replace: true }), 3000);
       return () => clearTimeout(timer);
     }
   }, [loading, highlightName, guests]);
+
+  const handleApprove = async (bookingId: string) => {
+    try {
+      await firestoreBookings.approvePayment(bookingId);
+    } catch (err) {
+      console.error('Failed to approve:', err);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await updateDoc(doc(db, 'bookings', cancelTarget), { status: 'cancelled' });
+    } catch (err) {
+      console.error('Failed to cancel:', err);
+    } finally {
+      setCancelling(false);
+      setCancelTarget(null);
+    }
+  };
+
+  const handleTogglePin = async (bookingId: string, currentlyPinned: boolean) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), { isPinned: !currentlyPinned });
+    } catch (err) {
+      console.error('Failed to toggle pin:', err);
+    }
+  };
 
   const handleAddGuest = async () => {
     const errs: Record<string, string> = {};
@@ -154,7 +192,7 @@ export const Guests: React.FC = () => {
     setAddSubmitting(true);
     try {
       const prop = properties.find(p => p.id === addForm.property_id);
-      await bookingsApi.create({
+      await firestoreBookings.create({
         property_id: addForm.property_id,
         property_name: addForm.property_name || prop?.name || '',
         guest_name: addForm.name.trim(),
@@ -164,7 +202,7 @@ export const Guests: React.FC = () => {
         check_out: addForm.check_out,
         nightly_rate: prop?.nightly_rate || 120,
         security_deposit: prop?.security_deposit || 50,
-        payment_method: 'walk_in' as any,
+        payment_method: 'walk_in',
       });
       setShowAddModal(false);
       setAddForm({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
@@ -179,7 +217,7 @@ export const Guests: React.FC = () => {
     { id: 'all', label: 'All Guests' },
     { id: 'pending', label: 'Pending' },
     { id: 'upcoming', label: 'Upcoming' },
-    { id: 'in-progress', label: 'In Progress' },
+    { id: 'checked-in', label: 'Checked In' },
     { id: 'completed', label: 'Completed' },
   ];
 
@@ -203,7 +241,7 @@ export const Guests: React.FC = () => {
           <p className="text-[10px] uppercase tracking-widest text-primary-navy/50 font-bold mb-2">Upcoming Arrivals</p>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-headline font-bold text-primary-navy">{String(stats.upcoming).padStart(2, '0')}</span>
-            {stats.inProgress > 0 && <span className="text-xs text-emerald-600 font-bold mb-1">{stats.inProgress} currently in</span>}
+            {stats.checkedIn > 0 && <span className="text-xs text-emerald-600 font-bold mb-1">{stats.checkedIn} checked in</span>}
           </div>
         </div>
       </section>
@@ -241,7 +279,7 @@ export const Guests: React.FC = () => {
       <section className="space-y-4">
         {loading ? (
           <div className="space-y-4 animate-pulse">
-            {[1, 2, 3].map(i => <div key={i} className="h-40 bg-primary-navy/5 rounded-xl" />)}
+            {[1, 2, 3].map(i => <div key={i} className="h-44 bg-primary-navy/5 rounded-xl" />)}
           </div>
         ) : guests.length === 0 ? (
           <p className="text-center text-sm text-primary-navy/40 py-12">No guests found</p>
@@ -249,6 +287,7 @@ export const Guests: React.FC = () => {
           guests.map((guest, i) => {
             const isHighlighted = highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase();
             const cfg = STATUS_CONFIG[guest.displayStatus];
+            const isActive = guest.displayStatus !== 'completed';
 
             return (
               <motion.div
@@ -256,10 +295,12 @@ export const Guests: React.FC = () => {
                 ref={isHighlighted ? highlightedRef : undefined}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08 }}
+                transition={{ delay: i * 0.06 }}
                 className={cn(
                   "bg-white p-5 rounded-xl shadow-sm border space-y-4 transition-all duration-500",
-                  isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" : "border-primary-navy/5"
+                  isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" :
+                  guest.isPinned ? "border-secondary-gold/40 bg-secondary-gold/[0.03]" :
+                  "border-primary-navy/5"
                 )}
               >
                 {/* Header */}
@@ -273,8 +314,23 @@ export const Guests: React.FC = () => {
                       <p className="text-xs text-primary-navy/50 font-medium">{guest.guest_phone}</p>
                     </div>
                   </div>
-                  <div className={cn("px-3 py-1 rounded-full text-[10px] uppercase tracking-tighter font-bold", cfg.badgeClass)}>
-                    {cfg.label}
+                  <div className="flex items-center gap-2">
+                    <div className={cn("px-3 py-1 rounded-full text-[10px] uppercase tracking-tighter font-bold", cfg.badgeClass)}>
+                      {cfg.label}
+                    </div>
+                    {/* Pin Toggle */}
+                    <button
+                      onClick={() => handleTogglePin(guest.id, guest.isPinned)}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all active:scale-90",
+                        guest.isPinned
+                          ? "bg-secondary-gold/10 text-secondary-gold"
+                          : "text-primary-navy/20 hover:text-primary-navy/40 hover:bg-primary-navy/5"
+                      )}
+                      title={guest.isPinned ? 'Unpin VIP' : 'Pin as VIP'}
+                    >
+                      <Pin size={14} className={guest.isPinned ? "fill-current" : ""} />
+                    </button>
                   </div>
                 </div>
 
@@ -291,41 +347,52 @@ export const Guests: React.FC = () => {
                 </div>
 
                 {/* Action row */}
-                <div className="flex gap-3 pt-4 border-t border-primary-navy/5">
+                <div className="flex gap-3 pt-4 border-t border-primary-navy/5 flex-wrap">
                   {guest.displayStatus === 'pending' && (
-                    <>
-                      <div className="flex items-center gap-2 flex-1">
-                        <AlertCircle size={14} className="text-amber-500" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Awaiting Payment Approval</span>
-                      </div>
-                      <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
-                        <Phone size={16} />
-                      </button>
-                    </>
+                    <button
+                      onClick={() => handleApprove(guest.id)}
+                      className="flex-1 min-w-[140px] py-2.5 rounded-lg text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all bg-primary-navy text-white flex items-center justify-center gap-1.5"
+                    >
+                      <Check size={13} />
+                      Approve Booking
+                    </button>
                   )}
                   {guest.displayStatus === 'upcoming' && (
-                    <>
-                      <div className="flex items-center gap-2 flex-1">
-                        <Clock size={14} className="text-blue-500" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
-                          Arrives {new Date(guest.check_in).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </span>
-                      </div>
-                      <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
-                        <Phone size={16} />
-                      </button>
-                    </>
+                    <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <Clock size={14} className="text-blue-500 flex-shrink-0" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
+                        Arrives {new Date(guest.check_in).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
                   )}
-                  {guest.displayStatus === 'in-progress' && (
-                    <div className="flex items-center gap-2 flex-1">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  {guest.displayStatus === 'checked-in' && (
+                    <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse flex-shrink-0" />
                       <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Guest Currently Staying</span>
                     </div>
                   )}
                   {guest.displayStatus === 'completed' && (
-                    <div className="flex-1 py-2.5 text-center text-[10px] uppercase font-bold tracking-widest text-primary-navy/40">
+                    <div className="flex-1 min-w-[140px] py-2.5 text-center text-[10px] uppercase font-bold tracking-widest text-primary-navy/40">
                       Stay Completed
                     </div>
+                  )}
+
+                  {/* Cancel — visible for all active bookings */}
+                  {isActive && (
+                    <button
+                      onClick={() => setCancelTarget(guest.id)}
+                      className="px-4 py-2.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 text-[10px] uppercase font-bold tracking-widest active:scale-[0.98] transition-all flex items-center gap-1.5"
+                    >
+                      <Ban size={12} />
+                      Cancel
+                    </button>
+                  )}
+
+                  {/* Phone for pending / upcoming */}
+                  {(guest.displayStatus === 'pending' || guest.displayStatus === 'upcoming') && (
+                    <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
+                      <Phone size={16} />
+                    </button>
                   )}
                 </div>
               </motion.div>
@@ -341,6 +408,49 @@ export const Guests: React.FC = () => {
       >
         <UserPlus size={24} />
       </button>
+
+      {/* Cancel Confirmation Modal */}
+      <AnimatePresence>
+        {cancelTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[24px] w-full max-w-sm p-8 shadow-2xl text-center space-y-5"
+            >
+              <div className="w-14 h-14 bg-red-50 rounded-full mx-auto flex items-center justify-center">
+                <Ban size={28} className="text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-headline text-lg font-bold text-primary-navy">Cancel Booking?</h3>
+                <p className="text-sm text-primary-navy/50">
+                  Are you sure you want to cancel this booking? This will re-open these dates on the calendar.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCancelTarget(null)}
+                  className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy active:scale-[0.98] transition-all"
+                >
+                  Keep Booking
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {cancelling ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    'Yes, Cancel'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add Guest Modal */}
       {showAddModal && (
