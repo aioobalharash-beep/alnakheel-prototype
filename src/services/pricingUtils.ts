@@ -3,6 +3,7 @@ export interface PricingSettings {
   thursday_rate: number;
   friday_rate: number;
   saturday_rate: number;
+  security_deposit: number; // Refundable — excluded from revenue/tax
   special_dates: { date: string; price: number }[];  // YYYY-MM-DD
   discount?: {
     enabled: boolean;

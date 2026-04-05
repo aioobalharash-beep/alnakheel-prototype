@@ -18,6 +18,7 @@ interface RealtimeBooking {
   nights: number;
   total_amount: number;
   nightly_rate: number;
+  security_deposit: number;
   status: string;
   payment_status: string;
   payment_method: string;
@@ -52,21 +53,26 @@ export const Invoices: React.FC = () => {
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
-    const total = b.total_amount;
+    const deposit = b.security_deposit || 0;
+    const stayTotal = b.total_amount - deposit;
+    const items: Invoice['items'] = [
+      { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: stayTotal },
+    ];
+    if (deposit > 0) {
+      items.push({ id: 2, invoice_id: b.id, description: 'Refundable Security Deposit', amount: deposit });
+    }
     return {
       id: b.id,
       guest_name: b.guest_name,
       booking_ref: b.id.slice(0, 8).toUpperCase(),
       room_type: b.property_name,
-      subtotal: total,
+      subtotal: b.total_amount,
       vat_amount: 0,
-      total_amount: total,
+      total_amount: b.total_amount,
       status: b.status === 'confirmed' ? 'paid' : 'pending',
       vat_compliant: false,
       issued_date: b.created_at,
-      items: [
-        { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: total },
-      ],
+      items,
     };
   };
 
@@ -101,7 +107,7 @@ export const Invoices: React.FC = () => {
 
   const handleDownloadVAT = (month: number, year: number, label: string) => {
     const monthBookings = getMonthlyConfirmedBookings(month, year);
-    const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0);
     const vatCollected = +(totalRevenue * 0.05).toFixed(2);
 
     generateVATReportPDF({
@@ -115,7 +121,7 @@ export const Invoices: React.FC = () => {
         guest_name: b.guest_name,
         check_in: b.check_in,
         nights: b.nights,
-        amount: b.total_amount,
+        amount: b.total_amount - (b.security_deposit || 0),
       })),
     });
   };
@@ -254,7 +260,7 @@ export const Invoices: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {lastSixMonths.map((m, i) => {
             const monthBookings = getMonthlyConfirmedBookings(m.month, m.year);
-            const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount, 0);
+            const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0);
             const vatCollected = +(totalRevenue * 0.05).toFixed(2);
 
             return (
