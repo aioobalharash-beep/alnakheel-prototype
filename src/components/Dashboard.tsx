@@ -345,9 +345,6 @@ export const Dashboard: React.FC = () => {
               </div>
               {selectedDayBookings.map((b) => (
                 <div key={b.id} className="flex items-center gap-3 py-2 border-t border-primary-navy/5 first:border-t-0 first:pt-0">
-                  <div className="w-9 h-9 rounded-full overflow-hidden bg-primary-navy/5 flex-shrink-0">
-                    <img src={`https://i.pravatar.cc/150?u=${b.guest_name}`} alt={b.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-primary-navy truncate">{b.guest_name}</p>
                     <p className="text-[10px] text-primary-navy/50 font-medium">
@@ -415,9 +412,6 @@ export const Dashboard: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-full overflow-hidden bg-primary-navy/5 flex-shrink-0">
-                      <img src={`https://i.pravatar.cc/150?u=${nextCheckIn.guest_name}`} alt={nextCheckIn.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-primary-navy text-sm truncate">{nextCheckIn.guest_name}</p>
                       <p className="text-[11px] text-primary-navy/50 font-medium">
@@ -483,9 +477,6 @@ export const Dashboard: React.FC = () => {
                     <span className="bg-secondary-gold/20 text-secondary-gold px-2.5 py-1 rounded-full text-[9px] font-bold uppercase">New</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
-                      <img src={`https://i.pravatar.cc/150?u=${recentBooking.guest_name}`} alt={recentBooking.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-white text-sm truncate">New Booking from {recentBooking.guest_name}</p>
                       <p className="text-[11px] text-white/50 font-medium">

@@ -310,14 +310,9 @@ export const Guests: React.FC = () => {
               >
                 {/* Header */}
                 <div className="flex justify-between items-start">
-                  <div className="flex gap-3">
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-navy/5">
-                      <img src={`https://i.pravatar.cc/150?u=${guest.guest_name}`} alt={guest.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    </div>
-                    <div>
-                      <h3 className="font-headline font-bold text-primary-navy">{guest.guest_name}</h3>
-                      <p className="text-xs text-primary-navy/50 font-medium">{guest.guest_phone}</p>
-                    </div>
+                  <div>
+                    <h3 className="font-headline font-bold text-primary-navy">{guest.guest_name}</h3>
+                    <p className="text-xs text-primary-navy/50 font-medium">{guest.guest_phone}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={cn("px-3 py-1 rounded-full text-[10px] uppercase tracking-tighter font-bold", cfg.badgeClass)}>

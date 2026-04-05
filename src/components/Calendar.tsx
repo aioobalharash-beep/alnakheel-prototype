@@ -237,9 +237,6 @@ export const Calendar: React.FC = () => {
               className="bg-white rounded-xl p-4 flex items-center justify-between group active:bg-primary-navy/5 transition-colors border border-primary-navy/5 shadow-sm"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-navy/5">
-                  <img src={`https://i.pravatar.cc/150?u=${arrival.guest_name}`} alt={arrival.guest_name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
                 <div>
                   <p className="font-bold text-sm text-primary-navy">{arrival.guest_name}</p>
                   <p className="text-xs text-primary-navy/40 font-medium">

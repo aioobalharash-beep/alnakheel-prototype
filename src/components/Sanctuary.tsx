@@ -119,8 +119,8 @@ export const Sanctuary: React.FC = () => {
           CR: 1234567 | Tourism License: TL-889
         </div>
         <div className="flex gap-6 items-center">
-          <button className="text-xs text-primary-navy/60 underline font-bold">Terms of Stay</button>
-          <button className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
+          <button onClick={() => navigate('/terms')} className="text-xs text-primary-navy/60 underline font-bold">Terms of Stay</button>
+          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
         </div>
         <div className="flex gap-8 mt-2">
           <button className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
