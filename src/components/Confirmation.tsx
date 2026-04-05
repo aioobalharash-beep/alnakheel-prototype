@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle2, MapPin, ChevronRight, Instagram, MessageCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, MapPin, FileText } from 'lucide-react';
+import { generateInvoicePDF } from '../services/pdf';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -11,130 +12,177 @@ export const Confirmation: React.FC = () => {
   const booking = state?.booking;
   const propertyName = state?.propertyName || 'Al-Nakheel Sanctuary';
 
-  // If no booking state, redirect to home
-  if (!booking) {
-    return (
-      <div className="p-6 space-y-8 max-w-lg mx-auto text-center pt-20">
-        <h2 className="font-headline text-2xl font-bold text-primary-navy">No booking found</h2>
-        <p className="text-primary-navy/60 text-sm">It looks like you navigated here directly.</p>
-        <button
-          onClick={() => navigate('/')}
-          className="bg-primary-navy text-white px-8 py-3 rounded-xl font-bold text-sm"
-        >
-          Go to Home
-        </button>
-      </div>
+  // Auto-redirect if no valid booking
+  useEffect(() => {
+    if (!booking) {
+      navigate('/', { replace: true });
+    }
+  }, [booking, navigate]);
+
+  if (!booking) return null;
+
+  const isThawani = booking.payment_method === 'thawani';
+  const isBankTransfer = booking.payment_method === 'bank_transfer';
+
+  const deposit = booking.security_deposit || 0;
+  const stayTotal = booking.total_amount - deposit;
+
+  const handleViewInvoice = () => {
+    const doc = generateInvoicePDF({
+      id: booking.id,
+      guest_name: booking.guest_name,
+      room_type: propertyName,
+      issued_date: booking.created_at,
+      subtotal: booking.total_amount,
+      vat_amount: 0,
+      total_amount: booking.total_amount,
+      items: [
+        { description: `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`, amount: stayTotal },
+        ...(deposit > 0 ? [{ description: 'Refundable Security Deposit', amount: deposit }] : []),
+      ],
+    });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl as string, '_blank');
+  };
+
+  const handleLocationPin = () => {
+    const phone = booking.guest_phone?.replace(/[^\d]/g, '') || '';
+    const checkInFormatted = new Date(booking.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const message = encodeURIComponent(
+      `Al-Nakheel Sanctuary\n\nHere is your property location for your upcoming stay:\nhttps://maps.google.com/?q=23.5880,58.3829\n\nCheck-in: ${checkInFormatted}\n\nWe look forward to welcoming you!`
     );
-  }
+    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  };
 
   return (
-    <div className="p-6 space-y-8 max-w-lg mx-auto">
-      {/* Back Button */}
-      <button
-        onClick={() => navigate('/')}
-        className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
-      >
-        <ArrowLeft size={18} />
-        Back to Home
-      </button>
-
+    <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 py-16">
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-[32px] p-8 shadow-sm border border-primary-navy/5 text-center space-y-6"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="w-full max-w-md text-center space-y-10"
       >
-        <div className="w-20 h-20 bg-secondary-gold/10 rounded-full flex items-center justify-center mx-auto">
-          <CheckCircle2 className="text-secondary-gold" size={40} />
-        </div>
+        {/* Success Icon */}
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 15 }}
+        >
+          <div className="w-24 h-24 bg-secondary-gold/10 rounded-full flex items-center justify-center mx-auto">
+            <CheckCircle2 className="text-secondary-gold" size={48} />
+          </div>
+        </motion.div>
 
-        <div className="space-y-2">
-          <h2 className="font-headline text-3xl font-bold text-primary-navy leading-tight">
-            Booking Confirmed for {propertyName}
-          </h2>
-          <p className="text-primary-navy/60 text-sm leading-relaxed">
-            Your serene desert escape is ready. We have sent a detailed confirmation to your WhatsApp with your reservation details.
+        {/* Heading */}
+        <div className="space-y-3">
+          <h1 className="font-headline text-3xl font-bold text-primary-navy leading-tight">
+            Booking {isBankTransfer ? 'Submitted' : 'Confirmed'}
+          </h1>
+          <p className="text-primary-navy/40 text-sm leading-relaxed max-w-xs mx-auto">
+            {isBankTransfer
+              ? `Thank you, ${booking.guest_name.split(' ')[0]}. Your reservation at ${propertyName} is pending admin approval.`
+              : `Thank you, ${booking.guest_name.split(' ')[0]}. Your serene escape at ${propertyName} is confirmed.`
+            }
           </p>
         </div>
 
-        <div className="aspect-video rounded-[24px] overflow-hidden bg-primary-navy/5 shadow-inner">
-          <img
-            src="https://picsum.photos/seed/oman-kitchen-2/800/600"
-            alt="Property"
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        </div>
+        {/* Booking Details */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-[24px] p-6 border border-primary-navy/5 shadow-sm space-y-5"
+        >
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Check-in</p>
+              <p className="font-bold text-primary-navy text-sm">
+                {new Date(booking.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Duration</p>
+              <p className="font-bold text-primary-navy text-sm">{booking.nights} Night{booking.nights > 1 ? 's' : ''}</p>
+            </div>
+          </div>
 
-        <div className="space-y-3">
+          <div className="border-t border-primary-navy/5 pt-4 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-primary-navy/50">Stay Total</span>
+              <span className="font-bold text-primary-navy">{stayTotal} OMR</span>
+            </div>
+            {deposit > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-primary-navy/50">Refundable Deposit</span>
+                <span className="font-bold text-primary-navy">{deposit} OMR</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm pt-2 border-t border-primary-navy/5">
+              <span className="font-bold text-primary-navy">Grand Total</span>
+              <span className="font-bold text-secondary-gold font-headline text-lg">{booking.total_amount} OMR</span>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-primary-navy/30 font-bold uppercase tracking-widest">
+            Ref: {booking.id.slice(0, 8).toUpperCase()}
+          </p>
+        </motion.div>
+
+        {/* Conditional Invoice / Bank Transfer Note */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="space-y-3"
+        >
+          {isThawani && (
+            <button
+              onClick={handleViewInvoice}
+              className="w-full bg-primary-navy text-white py-4 rounded-[20px] font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all shadow-lg shadow-primary-navy/15"
+            >
+              <FileText size={18} />
+              View Invoice
+            </button>
+          )}
+
+          {isBankTransfer && (
+            <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4">
+              <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
+                Your tax invoice will be generated once our team approves your bank transfer.
+              </p>
+            </div>
+          )}
+
+          {/* Location Pin — always visible */}
+          <button
+            onClick={handleLocationPin}
+            className="w-full bg-white border-2 border-secondary-gold text-secondary-gold py-4 rounded-[20px] font-bold text-sm flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all hover:bg-secondary-gold/5"
+          >
+            <MapPin size={18} />
+            Get Location Pin
+          </button>
+
           <button
             onClick={() => navigate('/')}
-            className="w-full bg-white border border-primary-navy/10 text-primary-navy py-4 rounded-[20px] font-bold text-sm active:scale-[0.98] transition-all"
+            className="w-full text-primary-navy/40 py-3 font-bold text-xs uppercase tracking-widest hover:text-primary-navy/60 transition-colors"
           >
-            View Reservation Details
+            Back to Home
           </button>
-          <button
-            onClick={() => {
-              const phone = booking.guest_phone?.replace(/[^\d]/g, '') || '';
-              const message = encodeURIComponent(
-                `Al-Nakheel Sanctuary\n📍 Location Pin\n\nHere is your property location for your upcoming stay:\nhttps://maps.google.com/?q=23.5880,58.3829\n\nCheck-in: ${new Date(booking.check_in).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}\n\nWe look forward to welcoming you!`
-              );
-              window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-            }}
-            className="w-full bg-white border-2 border-secondary-gold text-secondary-gold py-4 rounded-[20px] font-bold text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:bg-secondary-gold/5"
-          >
-            <MapPin size={20} />
-            Get Location Pin via WhatsApp
-          </button>
-        </div>
+        </motion.div>
 
-        <div className="pt-6 border-t border-primary-navy/5 grid grid-cols-2 gap-8">
-          <div className="text-left">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Check-in</p>
-            <p className="font-bold text-primary-navy">
-              {new Date(booking.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
+        {/* Minimal Footer */}
+        <div className="pt-8 space-y-3">
+          <p className="text-secondary-gold font-headline font-bold text-lg">Al-Nakheel</p>
+          <div className="flex gap-5 items-center justify-center">
+            <button onClick={() => navigate('/terms')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">Terms</button>
+            <span className="text-primary-navy/15">|</span>
+            <button onClick={() => navigate('/about')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">About</button>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Duration</p>
-            <p className="font-bold text-primary-navy">{booking.nights} Night{booking.nights > 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-primary-navy/5">
-          <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60">Total Paid</span>
-            <span className="font-bold text-secondary-gold font-headline text-lg">{booking.total_amount} OMR</span>
-          </div>
-          <p className="text-[10px] text-primary-navy/40 mt-1">Booking Ref: {booking.id.slice(0, 8).toUpperCase()}</p>
+          <p className="text-[9px] text-primary-navy/25 font-bold uppercase tracking-widest">
+            &copy; Al-Nakheel Luxury Chalet. 2024
+          </p>
         </div>
       </motion.div>
-
-      <button
-        onClick={() => navigate('/')}
-        className="flex items-center justify-center gap-2 text-secondary-gold font-bold text-sm mx-auto hover:underline"
-      >
-        <ChevronRight size={16} className="rotate-180" />
-        Back to Explore
-      </button>
-
-      {/* Footer Branding */}
-      <footer className="pt-12 text-center space-y-6">
-        <h3 className="text-secondary-gold font-bold font-headline text-2xl">Al-Nakheel</h3>
-        <p className="text-xs text-primary-navy/60 leading-relaxed max-w-xs mx-auto">
-          A sanctuary of refined luxury in the heart of the desert. Al-Nakheel offers an unparalleled Omani experience blending heritage with elegance.
-        </p>
-        <div className="flex gap-6 items-center justify-center">
-          <button onClick={() => navigate('/terms')} className="text-xs text-secondary-gold underline font-bold">Terms of Stay</button>
-          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
-        </div>
-        <div className="flex gap-8 justify-center">
-          <Instagram size={20} className="text-primary-navy/40" />
-          <MessageCircle size={20} className="text-primary-navy/40" />
-        </div>
-        <div className="text-[10px] text-primary-navy/30 font-bold uppercase tracking-widest">
-          &copy; Al-Nakheel Luxury Chalet. CR: 1234567 | Tourism License: TL-889
-        </div>
-      </footer>
     </div>
   );
 };
