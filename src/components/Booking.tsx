@@ -174,22 +174,19 @@ export const Booking: React.FC = () => {
   const uploadToCloudinary = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-      if (!cloudName || !uploadPreset) {
-        reject(new Error('Cloudinary configuration missing'));
+      if (!cloudName) {
+        reject(new Error('Cloudinary cloud name is not configured'));
         return;
       }
 
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', uploadPreset);
+      formData.append('file', file as Blob);
+      formData.append('upload_preset', 'receipts_preset');
       formData.append('folder', 'alnakheel-receipts');
-      // Server-side transform: max 1000px width, auto quality
-      formData.append('transformation', 'w_1000,c_limit,q_auto');
 
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`);
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -203,11 +200,23 @@ export const Booking: React.FC = () => {
           const res = JSON.parse(xhr.responseText);
           resolve(res.secure_url);
         } else {
-          reject(new Error('Upload failed'));
+          let errorDetail = 'Upload failed';
+          try {
+            const errRes = JSON.parse(xhr.responseText);
+            errorDetail = errRes.error?.message || JSON.stringify(errRes);
+            console.error('Cloudinary Error Details:', errRes);
+          } catch {
+            console.error('Cloudinary Error Details:', xhr.status, xhr.responseText);
+          }
+          reject(new Error(errorDetail));
         }
       };
 
-      xhr.onerror = () => { setUploadProgress(null); reject(new Error('Upload failed')); };
+      xhr.onerror = () => {
+        setUploadProgress(null);
+        console.error('Cloudinary Error Details: Network error - request failed');
+        reject(new Error('Network error — please check your connection'));
+      };
       xhr.send(formData);
     });
   };
@@ -249,6 +258,7 @@ export const Booking: React.FC = () => {
         },
       });
     } catch (err: any) {
+      console.error('Cloudinary Error Details:', err.response?.data || err.message);
       setSubmitError(err.message || 'Booking failed. Please try again.');
     } finally {
       setSubmitting(false);
