@@ -83,10 +83,16 @@ export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
   doc.setFont('helvetica', 'normal');
   if (invoice.items && invoice.items.length > 0) {
     for (const item of invoice.items) {
+      const isDeposit = item.description.toLowerCase().includes('deposit');
+      if (isDeposit) {
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(100);
+      }
       doc.text(item.description, 20, y);
       doc.setFont('helvetica', 'bold');
       doc.text(item.amount.toFixed(2), pageWidth - 55, y);
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(1, 31, 54);
       y += 10;
     }
   } else {

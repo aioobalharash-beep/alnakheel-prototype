@@ -481,7 +481,7 @@ export const firestoreDashboard = {
     const properties = await firestoreProperties.list();
 
     const paidBookings = bookings.filter(b => b.payment_status === 'paid');
-    const revenueTotal = paidBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const revenueTotal = paidBookings.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0);
     const lastMonthRevenue = revenueTotal * 0.88;
     const revenueTrend = lastMonthRevenue > 0 ? Math.round(((revenueTotal - lastMonthRevenue) / lastMonthRevenue) * 100) : 0;
 
@@ -537,7 +537,7 @@ export const firestoreReports = {
 
     const paidBookings = bookings.filter(b => b.payment_status === 'paid');
     const avgNightlyRate = paidBookings.length > 0 ? Math.round(paidBookings.reduce((s, b) => s + b.nightly_rate, 0) / paidBookings.length) : 0;
-    const monthlyRevenue = paidBookings.reduce((s, b) => s + b.total_amount, 0);
+    const monthlyRevenue = paidBookings.reduce((s, b) => s + b.total_amount - (b.security_deposit || 0), 0);
 
     // Total nights booked this month
     const now = new Date();

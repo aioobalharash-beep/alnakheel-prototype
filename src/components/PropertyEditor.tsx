@@ -26,6 +26,7 @@ const DEFAULT_PRICING: PricingSettings = {
   thursday_rate: 140,
   friday_rate: 180,
   saturday_rate: 150,
+  security_deposit: 50,
   special_dates: [],
   discount: { enabled: false, type: 'percent', value: 10, start_date: '', end_date: '' },
 };
@@ -249,6 +250,14 @@ export const PropertyEditor: React.FC = () => {
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Saturday (OMR)</label>
             <input type="number" value={form.pricing.saturday_rate} onChange={(e) => setPricing({ saturday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-primary-navy/5">
+          <div className="sm:w-1/2 space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
+            <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
+            <p className="text-[10px] text-primary-navy/40 font-medium">This amount is collected at booking and fully refunded after checkout. It is excluded from all revenue and tax calculations.</p>
           </div>
         </div>
 

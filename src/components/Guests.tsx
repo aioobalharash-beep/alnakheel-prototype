@@ -22,6 +22,8 @@ interface BookingGuest {
   check_out: string;
   nights: number;
   total_amount: number;
+  security_deposit: number;
+  deposit_refunded: boolean;
   status: string;
   payment_status: string;
   payment_method: string;
@@ -96,6 +98,8 @@ export const Guests: React.FC = () => {
             check_out: data.check_out || '',
             nights: data.nights || 0,
             total_amount: data.total_amount || 0,
+            security_deposit: data.security_deposit || 0,
+            deposit_refunded: data.deposit_refunded === true,
             status: data.status || 'pending',
             payment_status: data.payment_status || 'pending',
             payment_method: data.payment_method || '',
@@ -345,6 +349,35 @@ export const Guests: React.FC = () => {
                   <span className="text-primary-navy/30">&bull;</span>
                   <span className="text-primary-navy/60">{guest.nights} night{guest.nights > 1 ? 's' : ''}</span>
                 </div>
+
+                {/* Deposit Badge */}
+                {guest.security_deposit > 0 && (
+                  <div className="flex items-center justify-between bg-surface-container-low rounded-lg px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">Deposit</span>
+                      <span className="text-xs font-bold text-primary-navy font-headline">{guest.security_deposit} OMR</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await updateDoc(doc(db, 'bookings', guest.id), { deposit_refunded: !guest.deposit_refunded });
+                        } catch (err) { console.error('Failed to toggle deposit:', err); }
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all active:scale-95",
+                        guest.deposit_refunded
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-amber-50 text-amber-700 border border-amber-200"
+                      )}
+                    >
+                      {guest.deposit_refunded ? (
+                        <><Check size={10} /> Refunded</>
+                      ) : (
+                        'Mark Refunded'
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* Action row */}
                 <div className="flex gap-3 pt-4 border-t border-primary-navy/5 flex-wrap">

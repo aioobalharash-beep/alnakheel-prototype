@@ -144,7 +144,7 @@ export const Booking: React.FC = () => {
   };
 
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
-  const securityDeposit = property?.security_deposit || 50;
+  const securityDeposit = pricingSettings?.security_deposit ?? property?.security_deposit ?? 50;
 
   // Dynamic pricing breakdown
   const priceBreakdown: PriceBreakdown | null = (() => {
@@ -278,7 +278,7 @@ export const Booking: React.FC = () => {
         check_in: checkIn,
         check_out: checkOut,
         nightly_rate: priceBreakdown ? Math.round(priceBreakdown.total / nights) : property.nightly_rate,
-        security_deposit: property.security_deposit,
+        security_deposit: securityDeposit,
         payment_method: paymentMethod,
         receiptURL,
       });
@@ -478,18 +478,24 @@ export const Booking: React.FC = () => {
             </div>
           )}
 
-          <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">Security Deposit</span>
-            <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
+          <div className="pt-3 border-t border-primary-navy/5 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-primary-navy/60 font-medium">Stay Total</span>
+              <span className="font-bold text-primary-navy">{priceBreakdown.total} OMR</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-primary-navy/60 font-medium">Refundable Deposit</span>
+              <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
+            </div>
           </div>
 
           <div className="pt-4 border-t border-primary-navy/5 flex justify-between items-end">
             <div>
-              <p className="text-xl font-bold font-headline">Total</p>
+              <p className="text-xl font-bold font-headline">Grand Total</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">Deposit refunded after checkout</p>
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-secondary-gold font-headline">{total} OMR</p>
-              <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40">Inclusive of all taxes</p>
             </div>
           </div>
         </motion.section>

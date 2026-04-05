@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   LayoutDashboard,
   Calendar as CalendarIcon,
@@ -13,6 +14,8 @@ import {
   CreditCard,
   CalendarPlus,
   Settings,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,6 +38,7 @@ export const Layout: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -94,6 +98,9 @@ export const Layout: React.FC = () => {
 
   const currentLabel = navItems.find(item => isActive(item.path))?.label || 'Dashboard';
 
+  // Close mobile sidebar on route change
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -150,12 +157,91 @@ export const Layout: React.FC = () => {
         </div>
       </aside>
 
+      {/* Mobile Sidebar Drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+            />
+            {/* Drawer */}
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="md:hidden fixed left-0 top-0 bottom-0 w-[280px] bg-primary-navy text-white z-50 flex flex-col py-8 px-6 shadow-2xl"
+            >
+              {/* Header + Close */}
+              <div className="flex items-center justify-between mb-10">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tighter uppercase">Al-Nakheel</h1>
+                  <p className="text-[9px] font-lato uppercase tracking-widest text-white/50 font-bold">Management Portal</p>
+                </div>
+                <button onClick={() => setMobileOpen(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                  <X size={20} className="text-white/60" />
+                </button>
+              </div>
+
+              {/* Nav Items */}
+              <nav className="flex-1 space-y-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all font-lato uppercase text-xs font-bold tracking-wider",
+                      isActive(item.path)
+                        ? "bg-white/10 text-secondary-gold"
+                        : "text-white/60 hover:bg-white/5 hover:text-secondary-gold"
+                    )}
+                  >
+                    <item.icon size={18} fill={isActive(item.path) ? "currentColor" : "none"} />
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Bottom Actions */}
+              <div className="mt-auto space-y-3 pt-6 border-t border-white/10">
+                <button
+                  onClick={() => navigate('/admin/edit-property')}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/60 text-xs font-bold uppercase tracking-wider hover:bg-white/5 hover:text-secondary-gold transition-all"
+                >
+                  <Settings size={16} />
+                  Edit Property
+                </button>
+                <button
+                  onClick={() => { setMobileOpen(false); navigate('/'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/60 text-xs font-bold uppercase tracking-wider hover:bg-white/5 hover:text-secondary-gold transition-all"
+                >
+                  <ExternalLink size={16} />
+                  View Client Portal
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/60 text-xs font-bold uppercase tracking-wider hover:bg-white/5 hover:text-red-400 transition-all"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
         <header className="sticky top-0 z-40 bg-pearl-white/80 backdrop-blur-xl border-b border-primary-navy/5 h-16 flex items-center justify-between px-6 md:px-8">
           <div className="flex items-center gap-4">
-            <button className="md:hidden p-2 rounded-full hover:bg-primary-navy/5">
+            <button onClick={() => setMobileOpen(true)} className="md:hidden p-2 rounded-full hover:bg-primary-navy/5">
               <Menu size={20} />
             </button>
             <Link to="/" className="text-lg font-bold tracking-[0.15em] uppercase font-headline md:hidden hover:text-secondary-gold transition-colors">Al-Nakheel</Link>

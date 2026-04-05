@@ -15,6 +15,7 @@ interface RealtimeBooking {
   check_out: string;
   nights: number;
   total_amount: number;
+  security_deposit: number;
   status: string;
   payment_status: string;
   created_at: string;
@@ -56,7 +57,7 @@ export const Reports: React.FC = () => {
   };
 
   // Computed stats
-  const totalRevenue = filteredBookings?.reduce((sum, b) => sum + b.total_amount, 0) ?? 0;
+  const totalRevenue = filteredBookings?.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0) ?? 0;
   const totalBookings = filteredBookings?.length ?? 0;
   const totalNights = filteredBookings?.reduce((sum, b) => sum + b.nights, 0) ?? 0;
   const avgStay = totalBookings > 0 ? +(totalNights / totalBookings).toFixed(1) : 0;
@@ -79,7 +80,7 @@ export const Reports: React.FC = () => {
           check_in: b.check_in,
           check_out: b.check_out,
           nights: b.nights,
-          amount: b.total_amount,
+          amount: b.total_amount - (b.security_deposit || 0),
         })),
       });
       setGenerating(false);
@@ -258,7 +259,7 @@ export const Reports: React.FC = () => {
                     </div>
                     <div className="col-span-3 text-right">
                       <span className="font-bold text-primary-navy font-headline text-sm">
-                        {b.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {(b.total_amount - (b.security_deposit || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
                     </div>
