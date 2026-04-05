@@ -5,8 +5,7 @@ import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload,
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../services/firebase';
+import { db } from '../services/firebase';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -171,74 +170,45 @@ export const Booking: React.FC = () => {
     setErrors(prev => ({ ...prev, receipt: '' }));
   };
 
-  // Compress image via Canvas — max 1000px width, max ~500KB
-  const compressImage = (file: File): Promise<Blob> => {
+  // Upload to Cloudinary with progress tracking and auto-optimization
+  const uploadToCloudinary = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      // PDFs can't be compressed via canvas — pass through
-      if (file.type === 'application/pdf') {
-        resolve(file);
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+      if (!cloudName || !uploadPreset) {
+        reject(new Error('Cloudinary configuration missing'));
         return;
       }
 
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const maxWidth = 1000;
-        let { width, height } = img;
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(file); return; }
-        ctx.drawImage(img, 0, 0, width, height);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+      formData.append('folder', 'alnakheel-receipts');
+      // Server-side transform: max 1000px width, auto quality
+      formData.append('transformation', 'w_1000,c_limit,q_auto');
 
-        // Start at quality 0.8 and step down if needed to hit ~500KB
-        let quality = 0.8;
-        const tryCompress = () => {
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) { resolve(file); return; }
-              if (blob.size > 500 * 1024 && quality > 0.3) {
-                quality -= 0.1;
-                tryCompress();
-              } else {
-                resolve(blob);
-              }
-            },
-            'image/jpeg',
-            quality
-          );
-        };
-        tryCompress();
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
-      img.src = url;
-    });
-  };
 
-  // Upload with progress tracking
-  const uploadWithProgress = (file: Blob, path: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const storageRef = ref(storage, path);
-      const task = uploadBytesResumable(storageRef, file);
-
-      task.on('state_changed',
-        (snap) => {
-          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-          setUploadProgress(pct);
-        },
-        (err) => { setUploadProgress(null); reject(err); },
-        async () => {
-          const url = await getDownloadURL(task.snapshot.ref);
-          setUploadProgress(null);
-          resolve(url);
+      xhr.onload = () => {
+        setUploadProgress(null);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const res = JSON.parse(xhr.responseText);
+          resolve(res.secure_url);
+        } else {
+          reject(new Error('Upload failed'));
         }
-      );
+      };
+
+      xhr.onerror = () => { setUploadProgress(null); reject(new Error('Upload failed')); };
+      xhr.send(formData);
     });
   };
 
@@ -252,14 +222,10 @@ export const Booking: React.FC = () => {
     const checkOut = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
 
     try {
-      // Compress + upload receipt to Firebase Storage if bank transfer
+      // Upload receipt to Cloudinary if bank transfer
       let receiptURL: string | undefined;
       if (paymentMethod === 'bank_transfer' && receiptFile) {
-        const compressed = await compressImage(receiptFile);
-        const timestamp = Date.now();
-        const ext = receiptFile.type === 'application/pdf' ? '.pdf' : '.jpg';
-        const safeName = receiptFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-        receiptURL = await uploadWithProgress(compressed, `receipts/${timestamp}_${safeName}${ext}`);
+        receiptURL = await uploadToCloudinary(receiptFile);
       }
 
       const result = await bookingsApi.create({
