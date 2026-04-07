@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, MessageCircle } from 'lucide-react';
+import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -184,12 +184,12 @@ export const Sanctuary: React.FC = () => {
           <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
         </div>
         <div className="flex gap-8 mt-2">
-          <button className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
-            <span className="material-symbols-outlined">camera</span>
-          </button>
-          <button className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+          <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+            <Instagram size={20} />
+          </a>
+          <a href="https://wa.me/96891000001" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
             <MessageCircle size={20} />
-          </button>
+          </a>
         </div>
         <p className="text-[10px] text-center text-primary-navy/40 font-bold">
           &copy; Al-Nakheel Luxury Chalet. 2024

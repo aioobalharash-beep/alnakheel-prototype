@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -23,6 +24,7 @@ interface RealtimeBooking {
 }
 
 export const Calendar: React.FC = () => {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,7 +227,7 @@ export const Calendar: React.FC = () => {
       <section className="space-y-4">
         <div className="flex justify-between items-end px-1">
           <h3 className="font-headline text-lg font-bold text-primary-navy">Next Arrivals</h3>
-          <button className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">View All</button>
+          <button onClick={() => navigate('/admin/guests')} className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">View All</button>
         </div>
         <div className="space-y-3">
           {upcomingArrivals.map((arrival, i) => (

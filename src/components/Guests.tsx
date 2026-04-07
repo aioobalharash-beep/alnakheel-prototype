@@ -432,11 +432,16 @@ export const Guests: React.FC = () => {
                     </button>
                   )}
 
-                  {/* Phone for pending / upcoming */}
+                  {/* WhatsApp for pending / upcoming */}
                   {(guest.displayStatus === 'pending' || guest.displayStatus === 'upcoming') && (
-                    <button className="px-4 py-2.5 rounded-lg bg-primary-navy/5 text-primary-navy active:scale-[0.98] transition-all">
+                    <a
+                      href={`https://wa.me/${guest.guest_phone.replace(/[^\d]/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-[0.98] transition-all"
+                    >
                       <Phone size={16} />
-                    </button>
+                    </a>
                   )}
                 </div>
               </motion.div>
