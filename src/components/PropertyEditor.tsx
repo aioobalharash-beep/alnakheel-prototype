@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -19,6 +19,9 @@ interface PropertyDetails {
   features: string[];
   gallery: GalleryImage[];
   pricing: PricingSettings;
+  bank_name: string;
+  account_name: string;
+  iban: string;
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -45,6 +48,9 @@ const DEFAULT_DATA: PropertyDetails = {
     { url: 'https://picsum.photos/seed/oman-kitchen/800/1000', label: 'Culinary Studio' },
   ],
   pricing: DEFAULT_PRICING,
+  bank_name: 'Bank Muscat',
+  account_name: 'Al-Nakheel Luxury Properties LLC',
+  iban: 'OM12 0123 0000 0012 3456 789',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -385,6 +391,31 @@ export const PropertyEditor: React.FC = () => {
             </div>
           </motion.div>
         )}
+      </section>
+
+      {/* Bank Transfer Details */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <Landmark size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Bank Transfer Details</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          These details are shown to guests who choose bank transfer as their payment method.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Bank Name</label>
+            <input type="text" value={form.bank_name} onChange={(e) => setForm(prev => ({ ...prev, bank_name: e.target.value }))} placeholder="e.g. Bank Muscat" className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Account Name</label>
+            <input type="text" value={form.account_name} onChange={(e) => setForm(prev => ({ ...prev, account_name: e.target.value }))} placeholder="e.g. Al-Nakheel LLC" className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">IBAN / Account Number</label>
+            <input type="text" value={form.iban} onChange={(e) => setForm(prev => ({ ...prev, iban: e.target.value }))} placeholder="e.g. OM12 0123 ..." className={inputClass} />
+          </div>
+        </div>
       </section>
 
       {/* Description */}

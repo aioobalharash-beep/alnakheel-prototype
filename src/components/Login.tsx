@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, LogIn, UserPlus, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, LogIn, UserPlus, AlertCircle, ArrowLeft, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { sendPasswordResetEmail } from '../services/firebase';
 import { cn } from '@/src/lib/utils';
 
 export const Login: React.FC = () => {
@@ -16,6 +17,25 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email address first');
+      return;
+    }
+    setResetLoading(true);
+    setError('');
+    try {
+      await sendPasswordResetEmail(email.trim());
+      setResetSent(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +155,30 @@ export const Login: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {!isRegister && (
+              <div className="flex justify-end">
+                {resetSent ? (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600"
+                  >
+                    <Mail size={12} />
+                    Reset link sent to {email}
+                  </motion.p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={resetLoading}
+                    className="text-[11px] font-bold text-secondary-gold hover:underline disabled:opacity-50"
+                  >
+                    {resetLoading ? 'Sending...' : 'Forgot Password?'}
+                  </button>
+                )}
+              </div>
+            )}
 
             {isRegister && (
               <div className="space-y-1.5">

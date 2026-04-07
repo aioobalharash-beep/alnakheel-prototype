@@ -45,6 +45,9 @@ export const Booking: React.FC = () => {
   // Dynamic pricing from Firestore
   const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
 
+  // Dynamic bank details from Firestore
+  const [bankDetails, setBankDetails] = useState({ bank_name: 'Bank Muscat', account_name: 'Al-Nakheel Luxury Properties LLC', iban: 'OM12 0123 0000 0012 3456 789' });
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -87,12 +90,20 @@ export const Booking: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load dynamic pricing settings
+  // Load dynamic pricing settings + bank details
   useEffect(() => {
     getDoc(doc(db, 'settings', 'property_details'))
       .then(snap => {
-        if (snap.exists() && snap.data().pricing) {
-          setPricingSettings(snap.data().pricing as PricingSettings);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.pricing) setPricingSettings(data.pricing as PricingSettings);
+          if (data.bank_name || data.account_name || data.iban) {
+            setBankDetails(prev => ({
+              bank_name: data.bank_name || prev.bank_name,
+              account_name: data.account_name || prev.account_name,
+              iban: data.iban || prev.iban,
+            }));
+          }
         }
       })
       .catch(console.error);
@@ -613,9 +624,9 @@ export const Booking: React.FC = () => {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
                 <p className="text-xs font-bold text-amber-800">Bank Transfer Details</p>
                 <div className="text-xs text-amber-700 space-y-1">
-                  <p><span className="font-bold">Bank:</span> Bank Muscat</p>
-                  <p><span className="font-bold">Account:</span> Al-Nakheel Luxury Properties LLC</p>
-                  <p><span className="font-bold">IBAN:</span> OM12 0123 0000 0012 3456 789</p>
+                  <p><span className="font-bold">Bank:</span> {bankDetails.bank_name}</p>
+                  <p><span className="font-bold">Account:</span> {bankDetails.account_name}</p>
+                  <p><span className="font-bold">IBAN:</span> {bankDetails.iban}</p>
                   <p><span className="font-bold">Reference:</span> Your phone number</p>
                 </div>
               </div>
