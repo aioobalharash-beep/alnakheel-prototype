@@ -7,7 +7,7 @@ import { propertiesApi, bookingsApi } from '../services/api';
 import { sendWhatsAppInvoice } from './Invoices';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { calculateTotalPrice, formatBreakdown, type PricingSettings, type PriceBreakdown } from '../services/pricingUtils';
+import { calculateTotalPrice, formatBreakdown, migratePricing, type PricingSettings, type PriceBreakdown } from '../services/pricingUtils';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -96,7 +96,7 @@ export const Booking: React.FC = () => {
       .then(snap => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.pricing) setPricingSettings(data.pricing as PricingSettings);
+          if (data.pricing) setPricingSettings(migratePricing(data.pricing));
           if (data.bank_name || data.account_name || data.iban) {
             setBankDetails(prev => ({
               bank_name: data.bank_name || prev.bank_name,
@@ -131,6 +131,9 @@ export const Booking: React.FC = () => {
 
     if (!selectedDates.start || (selectedDates.start && selectedDates.end)) {
       setSelectedDates({ start: day, end: null });
+    } else if (day === selectedDates.start) {
+      // Same day clicked twice → Day Use
+      setSelectedDates({ start: day, end: day });
     } else {
       // Check if any day in the range is booked
       const rangeStart = Math.min(day, selectedDates.start);
@@ -154,22 +157,25 @@ export const Booking: React.FC = () => {
     setErrors(prev => ({ ...prev, dates: '' }));
   };
 
+  const isDayUse = selectedDates.start !== null && selectedDates.end !== null && selectedDates.start === selectedDates.end;
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
   const securityDeposit = pricingSettings?.security_deposit ?? property?.security_deposit ?? 50;
 
   // Dynamic pricing breakdown
   const priceBreakdown: PriceBreakdown | null = (() => {
-    if (!nights || !selectedDates.start || !selectedDates.end) return null;
+    if (selectedDates.start === null || selectedDates.end === null) return null;
+    if (!isDayUse && !nights) return null;
     const checkInStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
     const checkOutStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
     const fallbackRate = property?.nightly_rate || 120;
-    const pricing: PricingSettings = pricingSettings || {
+    const pricing: PricingSettings = pricingSettings || migratePricing({
       weekday_rate: fallbackRate,
       thursday_rate: fallbackRate,
       friday_rate: fallbackRate,
       saturday_rate: fallbackRate,
+      day_use_rate: Math.round(fallbackRate * 0.6),
       special_dates: [],
-    };
+    });
     return calculateTotalPrice(checkInStr, checkOutStr, pricing);
   })();
 
@@ -265,7 +271,7 @@ export const Booking: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validate() || !property || !selectedDates.start || !selectedDates.end) return;
+    if (!validate() || !property || selectedDates.start === null || selectedDates.end === null) return;
 
     setSubmitting(true);
     setSubmitError('');
@@ -288,7 +294,7 @@ export const Booking: React.FC = () => {
         guest_email: guestEmail || undefined,
         check_in: checkIn,
         check_out: checkOut,
-        nightly_rate: priceBreakdown ? Math.round(priceBreakdown.total / nights) : property.nightly_rate,
+        nightly_rate: priceBreakdown ? (isDayUse ? priceBreakdown.total : Math.round(priceBreakdown.total / nights)) : property.nightly_rate,
         security_deposit: securityDeposit,
         payment_method: paymentMethod,
         receiptURL,
@@ -448,24 +454,26 @@ export const Booking: React.FC = () => {
 
         {errors.dates && <p className="text-red-500 text-xs mt-4 font-medium">{errors.dates}</p>}
 
-        {selectedDates.start && (
+        {selectedDates.start !== null && (
           <div className="mt-4 text-xs text-primary-navy/60 text-center">
-            {selectedDates.end
-              ? `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
-              : `Select check-out date`}
+            {selectedDates.end !== null
+              ? isDayUse
+                ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
+                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
+              : `Tap again for Day Use, or select check-out date`}
           </div>
         )}
       </motion.div>
 
       {/* Pricing Summary */}
-      {nights > 0 && priceBreakdown && (
+      {priceBreakdown && (isDayUse || nights > 0) && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-surface-container-low p-6 rounded-[24px] space-y-4"
         >
           <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">Stay</span>
+            <span className="text-primary-navy/60 font-medium">{isDayUse ? 'Day Use' : 'Stay'}</span>
             <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
           </div>
 
@@ -569,7 +577,7 @@ export const Booking: React.FC = () => {
       </section>
 
       {/* Payment Method Selection */}
-      {nights > 0 && (
+      {(isDayUse || nights > 0) && (
         <section className="space-y-4">
           <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Payment Method *</label>
           <div className="grid grid-cols-2 gap-3">
@@ -688,7 +696,7 @@ export const Booking: React.FC = () => {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || nights === 0 || maintenanceMode}
+          disabled={submitting || (!isDayUse && nights === 0) || maintenanceMode}
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (

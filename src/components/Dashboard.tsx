@@ -108,14 +108,15 @@ export const Dashboard: React.FC = () => {
   const todayDay = today.getMonth() === calMonth && today.getFullYear() === calYear ? today.getDate() : -1;
 
   // Same color logic as Calendar page: build day → status map
-  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; bookings: RealtimeBooking[] }> => {
-    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; bookings: RealtimeBooking[] }>();
+  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }> => {
+    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }>();
 
     for (const b of bookings) {
       if (b.status === 'cancelled') continue;
 
       const checkIn = new Date(b.check_in);
       const checkOut = new Date(b.check_out);
+      const bIsDayUse = b.check_in === b.check_out;
       const monthStart = new Date(calYear, calMonth, 1);
       const monthEnd = new Date(calYear, calMonth + 1, 0);
 
@@ -131,8 +132,9 @@ export const Dashboard: React.FC = () => {
         if (existing) {
           existing.bookings.push(b);
           if (statusVal === 'confirmed') existing.status = 'confirmed';
+          if (!bIsDayUse) existing.isDayUse = false;
         } else {
-          dayMap.set(d, { status: statusVal as 'pending' | 'confirmed', bookings: [b] });
+          dayMap.set(d, { status: statusVal as 'pending' | 'confirmed', isDayUse: bIsDayUse, bookings: [b] });
         }
       }
     }
@@ -287,6 +289,7 @@ export const Dashboard: React.FC = () => {
               const isToday = day === todayDay;
               const dayInfo = bookedDayMap.get(day);
               const hasBooking = !!dayInfo;
+              const isDayUseDay = dayInfo?.isDayUse;
               const isSelected = selectedDay === day;
 
               return (
@@ -301,19 +304,23 @@ export const Dashboard: React.FC = () => {
                     isSelected && "ring-2 ring-primary-navy ring-offset-1",
                   )}
                   style={
-                    hasBooking && dayInfo.status === 'confirmed' ? { backgroundColor: '#2E7D32', color: '#fff' } :
+                    hasBooking && dayInfo.status === 'confirmed' && !isDayUseDay ? { backgroundColor: '#2E7D32', color: '#fff' } :
+                    hasBooking && dayInfo.status === 'confirmed' && isDayUseDay ? { backgroundColor: '#2E7D32', backgroundImage: 'linear-gradient(135deg, #2E7D32 50%, transparent 50%)', color: '#2E7D32' } :
                     hasBooking && dayInfo.status === 'pending' ? { backgroundColor: '#FFD700', color: '#1a1a1a' } :
                     undefined
                   }
                 >
                   {day}
+                  {isDayUseDay && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-secondary-gold text-primary-navy rounded-full text-[6px] font-bold flex items-center justify-center leading-none">D</span>
+                  )}
                 </span>
               );
             })}
           </div>
 
           {/* Legend */}
-          <div className="mt-4 flex items-center gap-4">
+          <div className="mt-4 flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: '#2E7D32' }}></span>
               <span className="text-[10px] font-bold uppercase text-primary-navy/60">Confirmed</span>
@@ -321,6 +328,10 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: '#FFD700' }}></span>
               <span className="text-[10px] font-bold uppercase text-primary-navy/60">Pending</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="relative w-2.5 h-2.5 rounded bg-secondary-gold"><span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
+              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Day Use</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
@@ -348,7 +359,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-primary-navy truncate">{b.guest_name}</p>
                     <p className="text-[10px] text-primary-navy/50 font-medium">
-                      {b.property_name} &bull; {b.nights} night{b.nights > 1 ? 's' : ''} &bull; {b.total_amount} OMR
+                      {b.property_name} &bull; {b.check_in === b.check_out ? 'Day Use' : `${b.nights} night${b.nights > 1 ? 's' : ''}`} &bull; {b.total_amount} OMR
                     </p>
                   </div>
                   <span className={cn(
@@ -480,7 +491,7 @@ export const Dashboard: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-white text-sm truncate">New Booking from {recentBooking.guest_name}</p>
                       <p className="text-[11px] text-white/50 font-medium">
-                        {recentBooking.property_name} &bull; {recentBooking.nights} night{recentBooking.nights > 1 ? 's' : ''}
+                        {recentBooking.property_name} &bull; {recentBooking.check_in === recentBooking.check_out ? 'Day Use' : `${recentBooking.nights} night${recentBooking.nights > 1 ? 's' : ''}`}
                       </p>
                     </div>
                   </div>

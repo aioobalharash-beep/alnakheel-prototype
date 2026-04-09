@@ -61,17 +61,17 @@ export const Calendar: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Build a map of day -> booking status for current month
-  const getBookedDayMap = (): Map<number, 'pending' | 'confirmed'> => {
-    const dayMap = new Map<number, 'pending' | 'confirmed'>();
+  // Build a map of day -> booking info for current month
+  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean }> => {
+    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean }>();
 
     for (const b of bookings) {
       if (b.status === 'cancelled') continue;
 
       const checkIn = new Date(b.check_in);
       const checkOut = new Date(b.check_out);
+      const bIsDayUse = b.check_in === b.check_out;
 
-      // Only consider bookings that overlap with the current displayed month
       const monthStart = new Date(currentYear, currentMonth, 1);
       const monthEnd = new Date(currentYear, currentMonth + 1, 0);
 
@@ -84,11 +84,14 @@ export const Calendar: React.FC = () => {
 
       for (let d = startDay; d <= endDay; d++) {
         const existing = dayMap.get(d);
-        // confirmed takes priority over pending
-        if (b.status === 'confirmed' || b.status === 'checked-in') {
-          dayMap.set(d, 'confirmed');
-        } else if (b.status === 'pending' && existing !== 'confirmed') {
-          dayMap.set(d, 'pending');
+        const statusVal = (b.status === 'confirmed' || b.status === 'checked-in') ? 'confirmed' as const : 'pending' as const;
+
+        if (existing) {
+          if (statusVal === 'confirmed') existing.status = 'confirmed';
+          // If any booking on this day is NOT day-use, mark as full
+          if (!bIsDayUse) existing.isDayUse = false;
+        } else {
+          dayMap.set(d, { status: statusVal, isDayUse: bIsDayUse });
         }
       }
     }
@@ -183,7 +186,9 @@ export const Calendar: React.FC = () => {
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const isToday = day === todayDay;
-            const bookingStatus = bookedDayMap.get(day);
+            const entry = bookedDayMap.get(day);
+            const bookingStatus = entry?.status;
+            const isDayUseDay = entry?.isDayUse;
 
             return (
               <div
@@ -191,24 +196,29 @@ export const Calendar: React.FC = () => {
                 className={cn(
                   "relative text-sm font-medium p-2 rounded-lg transition-all",
                   isToday && !bookingStatus && "bg-primary-navy text-white font-bold",
-                  bookingStatus === 'confirmed' && "text-white font-bold",
+                  bookingStatus === 'confirmed' && !isDayUseDay && "text-white font-bold",
+                  bookingStatus === 'confirmed' && isDayUseDay && "font-bold",
                   bookingStatus === 'pending' && "text-primary-navy font-bold",
                   !isToday && !bookingStatus && "text-primary-navy",
                 )}
                 style={
-                  bookingStatus === 'confirmed' ? { backgroundColor: '#2E7D32' } :
+                  bookingStatus === 'confirmed' && !isDayUseDay ? { backgroundColor: '#2E7D32' } :
+                  bookingStatus === 'confirmed' && isDayUseDay ? { backgroundColor: '#2E7D32', backgroundImage: 'linear-gradient(135deg, #2E7D32 50%, transparent 50%)', color: '#2E7D32' } :
                   bookingStatus === 'pending' ? { backgroundColor: '#FFD700' } :
                   undefined
                 }
               >
                 {day}
+                {isDayUseDay && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-secondary-gold text-primary-navy rounded-full text-[7px] font-bold flex items-center justify-center leading-none">D</span>
+                )}
               </div>
             );
           })}
         </div>
 
         {/* Legend */}
-        <div className="mt-6 flex items-center gap-6">
+        <div className="mt-6 flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#2E7D32' }}></span>
             <span className="text-[10px] font-bold uppercase text-primary-navy/60">Confirmed</span>
@@ -216,6 +226,10 @@ export const Calendar: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#FFD700' }}></span>
             <span className="text-[10px] font-bold uppercase text-primary-navy/60">Pending</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="relative w-3 h-3 rounded bg-secondary-gold"><span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Day Use</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded bg-primary-navy"></span>

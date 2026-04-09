@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import type { PricingSettings } from '../services/pricingUtils';
+import { migratePricing, type PricingSettings } from '../services/pricingUtils';
 
 interface GalleryImage { url: string; label: string; }
 
@@ -25,10 +25,14 @@ interface PropertyDetails {
 }
 
 const DEFAULT_PRICING: PricingSettings = {
-  weekday_rate: 120,
+  sunday_rate: 120,
+  monday_rate: 120,
+  tuesday_rate: 120,
+  wednesday_rate: 120,
   thursday_rate: 140,
   friday_rate: 180,
   saturday_rate: 150,
+  day_use_rate: 70,
   security_deposit: 50,
   special_dates: [],
   discount: { enabled: false, type: 'percent', value: 10, start_date: '', end_date: '' },
@@ -88,7 +92,7 @@ export const PropertyEditor: React.FC = () => {
           setForm({
             ...DEFAULT_DATA,
             ...data,
-            pricing: { ...DEFAULT_PRICING, ...data.pricing },
+            pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
           });
         }
       })
@@ -240,36 +244,44 @@ export const PropertyEditor: React.FC = () => {
           <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Dynamic Pricing</h3>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Sun–Wed (OMR)</label>
-            <input type="number" value={form.pricing.weekday_rate} onChange={(e) => setPricing({ weekday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Thursday (OMR)</label>
-            <input type="number" value={form.pricing.thursday_rate} onChange={(e) => setPricing({ thursday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Friday (OMR)</label>
-            <input type="number" value={form.pricing.friday_rate} onChange={(e) => setPricing({ friday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Saturday (OMR)</label>
-            <input type="number" value={form.pricing.saturday_rate} onChange={(e) => setPricing({ saturday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-primary-navy/5">
-          <div className="sm:w-1/2 space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
-            <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
-            <p className="text-[10px] text-primary-navy/40 font-medium">This amount is collected at booking and fully refunded after checkout. It is excluded from all revenue and tax calculations.</p>
-          </div>
-        </div>
-
-        <p className="text-[10px] text-primary-navy/40 font-medium">
-          Weekdays = Sunday through Wednesday. Weekend rates apply to Thursday, Friday, and Saturday nights.
+        <p className="text-[10px] text-primary-navy/40 font-medium mb-1">
+          Set the nightly rate for each day of the week. Each night is charged based on the check-in day.
         </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {([
+            ['sunday_rate', 'Sun'],
+            ['monday_rate', 'Mon'],
+            ['tuesday_rate', 'Tue'],
+            ['wednesday_rate', 'Wed'],
+            ['thursday_rate', 'Thu'],
+            ['friday_rate', 'Fri'],
+            ['saturday_rate', 'Sat'],
+          ] as [keyof PricingSettings, string][]).map(([key, label]) => (
+            <div key={key} className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{label} (OMR)</label>
+              <input type="number" value={form.pricing[key] as number} onChange={(e) => setPricing({ [key]: parseInt(e.target.value) || 0 })} className={inputClass} />
+            </div>
+          ))}
+        </div>
+
+        {/* Day Use Rate */}
+        <div className="pt-4 border-t border-primary-navy/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+                <Sun size={12} /> Day Use Rate (OMR)
+              </label>
+              <input type="number" value={form.pricing.day_use_rate} onChange={(e) => setPricing({ day_use_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
+              <p className="text-[10px] text-primary-navy/40 font-medium">Applied when check-in and check-out are on the same date (e.g. 12 PM – 10 PM).</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
+              <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
+              <p className="text-[10px] text-primary-navy/40 font-medium">Collected at booking, refunded after checkout. Excluded from revenue/tax.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Special Date Overrides */}
