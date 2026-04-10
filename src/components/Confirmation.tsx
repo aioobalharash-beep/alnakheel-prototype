@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { CheckCircle2, MapPin, FileText } from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdf';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -12,12 +14,26 @@ export const Confirmation: React.FC = () => {
   const booking = state?.booking;
   const propertyName = state?.propertyName || 'Al-Nakheel Sanctuary';
 
+  const [bankPhone, setBankPhone] = useState('');
+
   // Auto-redirect if no valid booking
   useEffect(() => {
     if (!booking) {
       navigate('/', { replace: true });
     }
   }, [booking, navigate]);
+
+  // Load bank phone from Firestore settings
+  useEffect(() => {
+    if (!booking || booking.payment_method !== 'bank_transfer') return;
+    getDoc(doc(db, 'settings', 'property_details'))
+      .then(snap => {
+        if (snap.exists() && snap.data().bankPhone) {
+          setBankPhone(snap.data().bankPhone);
+        }
+      })
+      .catch(console.error);
+  }, [booking]);
 
   if (!booking) return null;
 
@@ -146,10 +162,15 @@ export const Confirmation: React.FC = () => {
           )}
 
           {isBankTransfer && (
-            <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4">
+            <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4 space-y-2">
               <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
                 Your tax invoice will be generated once our team approves your bank transfer.
               </p>
+              {bankPhone.trim() && (
+                <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
+                  <span className="font-bold">Mobile Transfer (WhatsApp/Bank App):</span> {bankPhone}
+                </p>
+              )}
             </div>
           )}
 

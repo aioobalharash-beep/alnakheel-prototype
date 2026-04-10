@@ -46,7 +46,7 @@ export const Booking: React.FC = () => {
   const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
 
   // Dynamic bank details from Firestore
-  const [bankDetails, setBankDetails] = useState({ bank_name: 'Bank Muscat', account_name: 'Al-Nakheel Luxury Properties LLC', iban: 'OM12 0123 0000 0012 3456 789' });
+  const [bankDetails, setBankDetails] = useState({ bank_name: 'Bank Muscat', account_name: 'Al-Nakheel Luxury Properties LLC', iban: 'OM12 0123 0000 0012 3456 789', bankPhone: '' });
 
   useEffect(() => {
     propertiesApi.list()
@@ -102,6 +102,7 @@ export const Booking: React.FC = () => {
               bank_name: data.bank_name || prev.bank_name,
               account_name: data.account_name || prev.account_name,
               iban: data.iban || prev.iban,
+              bankPhone: data.bankPhone || '',
             }));
           }
         }
@@ -635,6 +636,9 @@ export const Booking: React.FC = () => {
                   <p><span className="font-bold">Bank:</span> {bankDetails.bank_name}</p>
                   <p><span className="font-bold">Account:</span> {bankDetails.account_name}</p>
                   <p><span className="font-bold">IBAN:</span> {bankDetails.iban}</p>
+                  {bankDetails.bankPhone.trim() && (
+                    <p><span className="font-bold">Mobile Transfer (WhatsApp/Bank App):</span> {bankDetails.bankPhone}</p>
+                  )}
                   <p><span className="font-bold">Reference:</span> Your phone number</p>
                 </div>
               </div>

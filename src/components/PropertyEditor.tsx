@@ -22,6 +22,7 @@ interface PropertyDetails {
   bank_name: string;
   account_name: string;
   iban: string;
+  bankPhone: string;
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -55,6 +56,7 @@ const DEFAULT_DATA: PropertyDetails = {
   bank_name: 'Bank Muscat',
   account_name: 'Al-Nakheel Luxury Properties LLC',
   iban: 'OM12 0123 0000 0012 3456 789',
+  bankPhone: '',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -414,7 +416,7 @@ export const PropertyEditor: React.FC = () => {
         <p className="text-[10px] text-primary-navy/40 font-medium">
           These details are shown to guests who choose bank transfer as their payment method.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Bank Name</label>
             <input type="text" value={form.bank_name} onChange={(e) => setForm(prev => ({ ...prev, bank_name: e.target.value }))} placeholder="e.g. Bank Muscat" className={inputClass} />
@@ -426,6 +428,11 @@ export const PropertyEditor: React.FC = () => {
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">IBAN / Account Number</label>
             <input type="text" value={form.iban} onChange={(e) => setForm(prev => ({ ...prev, iban: e.target.value }))} placeholder="e.g. OM12 0123 ..." className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone Number (for Mobile Transfer)</label>
+            <input type="text" value={form.bankPhone} onChange={(e) => setForm(prev => ({ ...prev, bankPhone: e.target.value }))} placeholder="e.g. +968 9000 0000" className={inputClass} />
+            <p className="text-[10px] text-primary-navy/40 font-medium">Shown to guests for WhatsApp/bank app transfers. Leave blank to hide.</p>
           </div>
         </div>
       </section>
