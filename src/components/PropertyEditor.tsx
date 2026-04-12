@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import type { PricingSettings } from '../services/pricingUtils';
+import { migratePricing, formatTime, type PricingSettings, type DayUseSlot } from '../services/pricingUtils';
 
 interface GalleryImage { url: string; label: string; }
 
@@ -19,15 +19,25 @@ interface PropertyDetails {
   features: string[];
   gallery: GalleryImage[];
   pricing: PricingSettings;
+  bank_name: string;
+  account_name: string;
+  iban: string;
+  bankPhone: string;
+  termsOfStay: string;
 }
 
 const DEFAULT_PRICING: PricingSettings = {
-  weekday_rate: 120,
+  sunday_rate: 120,
+  monday_rate: 120,
+  tuesday_rate: 120,
+  wednesday_rate: 120,
   thursday_rate: 140,
   friday_rate: 180,
   saturday_rate: 150,
+  day_use_rate: 70,
   security_deposit: 50,
   special_dates: [],
+  day_use_slots: [],
   discount: { enabled: false, type: 'percent', value: 10, start_date: '', end_date: '' },
 };
 
@@ -45,6 +55,11 @@ const DEFAULT_DATA: PropertyDetails = {
     { url: 'https://picsum.photos/seed/oman-kitchen/800/1000', label: 'Culinary Studio' },
   ],
   pricing: DEFAULT_PRICING,
+  bank_name: 'Bank Muscat',
+  account_name: 'Al-Nakheel Luxury Properties LLC',
+  iban: 'OM12 0123 0000 0012 3456 789',
+  bankPhone: '',
+  termsOfStay: '',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -64,6 +79,11 @@ export const PropertyEditor: React.FC = () => {
   const [specialDate, setSpecialDate] = useState('');
   const [specialPrice, setSpecialPrice] = useState('');
 
+  // Day-use slot form
+  const [newSlotName, setNewSlotName] = useState('');
+  const [newSlotStart, setNewSlotStart] = useState('11:00');
+  const [newSlotEnd, setNewSlotEnd] = useState('16:00');
+
   // Helpers to update pricing sub-object
   const setPricing = (patch: Partial<PricingSettings>) =>
     setForm(prev => ({ ...prev, pricing: { ...prev.pricing, ...patch } }));
@@ -82,7 +102,7 @@ export const PropertyEditor: React.FC = () => {
           setForm({
             ...DEFAULT_DATA,
             ...data,
-            pricing: { ...DEFAULT_PRICING, ...data.pricing },
+            pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
           });
         }
       })
@@ -160,6 +180,26 @@ export const PropertyEditor: React.FC = () => {
   const removeSpecialDate = (date: string) =>
     setPricing({ special_dates: form.pricing.special_dates.filter(s => s.date !== date) });
 
+  const addSlot = () => {
+    if (!newSlotName.trim() || !newSlotStart || !newSlotEnd) return;
+    const newSlot: DayUseSlot = {
+      id: `slot_${Date.now()}`,
+      name: newSlotName.trim(),
+      start_time: newSlotStart,
+      end_time: newSlotEnd,
+      sunday_rate: 40, monday_rate: 40, tuesday_rate: 40, wednesday_rate: 40,
+      thursday_rate: 50, friday_rate: 60, saturday_rate: 55,
+    };
+    setPricing({ day_use_slots: [...(form.pricing.day_use_slots || []), newSlot] });
+    setNewSlotName(''); setNewSlotStart('11:00'); setNewSlotEnd('16:00');
+  };
+
+  const removeSlot = (id: string) =>
+    setPricing({ day_use_slots: (form.pricing.day_use_slots || []).filter(s => s.id !== id) });
+
+  const updateSlot = (id: string, patch: Partial<DayUseSlot>) =>
+    setPricing({ day_use_slots: (form.pricing.day_use_slots || []).map(s => s.id === id ? { ...s, ...patch } : s) });
+
   if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
 
   return (
@@ -234,36 +274,98 @@ export const PropertyEditor: React.FC = () => {
           <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Dynamic Pricing</h3>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Sun–Wed (OMR)</label>
-            <input type="number" value={form.pricing.weekday_rate} onChange={(e) => setPricing({ weekday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Thursday (OMR)</label>
-            <input type="number" value={form.pricing.thursday_rate} onChange={(e) => setPricing({ thursday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Friday (OMR)</label>
-            <input type="number" value={form.pricing.friday_rate} onChange={(e) => setPricing({ friday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Saturday (OMR)</label>
-            <input type="number" value={form.pricing.saturday_rate} onChange={(e) => setPricing({ saturday_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-primary-navy/5">
-          <div className="sm:w-1/2 space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
-            <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
-            <p className="text-[10px] text-primary-navy/40 font-medium">This amount is collected at booking and fully refunded after checkout. It is excluded from all revenue and tax calculations.</p>
-          </div>
-        </div>
-
-        <p className="text-[10px] text-primary-navy/40 font-medium">
-          Weekdays = Sunday through Wednesday. Weekend rates apply to Thursday, Friday, and Saturday nights.
+        <p className="text-[10px] text-primary-navy/40 font-medium mb-1">
+          Set the nightly rate for each day of the week. Each night is charged based on the check-in day.
         </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {([
+            ['sunday_rate', 'Sun'],
+            ['monday_rate', 'Mon'],
+            ['tuesday_rate', 'Tue'],
+            ['wednesday_rate', 'Wed'],
+            ['thursday_rate', 'Thu'],
+            ['friday_rate', 'Fri'],
+            ['saturday_rate', 'Sat'],
+          ] as [keyof PricingSettings, string][]).map(([key, label]) => (
+            <div key={key} className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{label} (OMR)</label>
+              <input type="number" value={form.pricing[key] as number} onChange={(e) => setPricing({ [key]: parseInt(e.target.value) || 0 })} className={inputClass} />
+            </div>
+          ))}
+        </div>
+
+        {/* Security Deposit */}
+        <div className="pt-4 border-t border-primary-navy/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
+              <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
+              <p className="text-[10px] text-primary-navy/40 font-medium">Collected at booking, refunded after checkout. Excluded from revenue/tax.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Day-Use Time Slots */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <Clock size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Day-Use Time Slots</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          Define time-limited booking slots for same-day stays. Each slot has its own per-day pricing grid.
+        </p>
+
+        {(form.pricing.day_use_slots || []).map(slot => (
+          <div key={slot.id} className="bg-pearl-white rounded-xl p-4 space-y-3 border border-primary-navy/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                <p className="text-[10px] text-primary-navy/40 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+              </div>
+              <button onClick={() => removeSlot(slot.id)} className="text-primary-navy/20 hover:text-red-500 transition-colors"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {(['sunday_rate', 'monday_rate', 'tuesday_rate', 'wednesday_rate', 'thursday_rate', 'friday_rate', 'saturday_rate'] as (keyof DayUseSlot)[]).map((key, i) => (
+                <div key={key} className="space-y-1">
+                  <label className="text-[8px] font-bold uppercase text-primary-navy/30 text-center block">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</label>
+                  <input
+                    type="number"
+                    value={slot[key] as number}
+                    onChange={(e) => updateSlot(slot.id, { [key]: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-primary-navy/10 rounded-lg py-2 px-1 text-xs font-medium text-center focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="border-t border-primary-navy/5 pt-4 space-y-3">
+          <p className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-widest">Add New Slot</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Slot Name</label>
+              <input type="text" value={newSlotName} onChange={(e) => setNewSlotName(e.target.value)} placeholder="e.g. Morning Escape" className={inputClass} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Start Time</label>
+              <input type="time" value={newSlotStart} onChange={(e) => setNewSlotStart(e.target.value)} className={inputClass} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">End Time</label>
+              <input type="time" value={newSlotEnd} onChange={(e) => setNewSlotEnd(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <button
+            onClick={addSlot}
+            disabled={!newSlotName.trim() || !newSlotStart || !newSlotEnd}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-navy/5 rounded-xl text-primary-navy/60 hover:bg-primary-navy/10 transition-colors disabled:opacity-30 text-xs font-bold"
+          >
+            <Plus size={14} /> Add Slot
+          </button>
+        </div>
       </section>
 
       {/* Special Date Overrides */}
@@ -385,6 +487,60 @@ export const PropertyEditor: React.FC = () => {
             </div>
           </motion.div>
         )}
+      </section>
+
+      {/* Bank Transfer Details */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <Landmark size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Bank Transfer Details</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          These details are shown to guests who choose bank transfer as their payment method.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Bank Name</label>
+            <input type="text" value={form.bank_name} onChange={(e) => setForm(prev => ({ ...prev, bank_name: e.target.value }))} placeholder="e.g. Bank Muscat" className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Account Name</label>
+            <input type="text" value={form.account_name} onChange={(e) => setForm(prev => ({ ...prev, account_name: e.target.value }))} placeholder="e.g. Al-Nakheel LLC" className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">IBAN / Account Number</label>
+            <input type="text" value={form.iban} onChange={(e) => setForm(prev => ({ ...prev, iban: e.target.value }))} placeholder="e.g. OM12 0123 ..." className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone Number (for Mobile Transfer)</label>
+            <input type="text" value={form.bankPhone} onChange={(e) => setForm(prev => ({ ...prev, bankPhone: e.target.value }))} placeholder="e.g. +968 9000 0000" className={inputClass} />
+            <p className="text-[10px] text-primary-navy/40 font-medium">Shown to guests for WhatsApp/bank app transfers. Leave blank to hide.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Terms of Stay */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <FileText size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Terms of Stay</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          Define rules, policies, refund terms, and conditions that guests must accept before booking. This text is displayed in a pop-up during checkout.
+        </p>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Terms &amp; Conditions</label>
+          <textarea
+            value={form.termsOfStay}
+            onChange={(e) => setForm(prev => ({ ...prev, termsOfStay: e.target.value }))}
+            rows={10}
+            placeholder={"e.g.\n1. Check-in is at 4:00 PM and check-out is at 12:00 PM.\n2. A refundable security deposit of 50 OMR is required.\n3. No smoking is allowed inside the property.\n4. Pets are not permitted.\n5. Cancellation within 48 hours of check-in forfeits the deposit.\n6. Guests are responsible for any damage to the property."}
+            className={cn(inputClass, "leading-relaxed resize-none font-mono text-xs")}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">
+            {form.termsOfStay.length > 0 ? `${form.termsOfStay.length} characters` : 'No terms defined yet — guests will not see a terms checkbox during booking.'}
+          </p>
+        </div>
       </section>
 
       {/* Description */}

@@ -15,6 +15,7 @@ import { Testimonials } from './components/Testimonials';
 import { Terms } from './components/Terms';
 import { About } from './components/About';
 import { PropertyEditor } from './components/PropertyEditor';
+import { ScrollToTop } from './components/ScrollToTop';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -73,6 +74,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>

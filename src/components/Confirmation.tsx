@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { CheckCircle2, MapPin, FileText } from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdf';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +14,8 @@ export const Confirmation: React.FC = () => {
   const booking = state?.booking;
   const propertyName = state?.propertyName || 'Al-Nakheel Sanctuary';
 
+  const [bankPhone, setBankPhone] = useState('');
+
   // Auto-redirect if no valid booking
   useEffect(() => {
     if (!booking) {
@@ -19,13 +23,31 @@ export const Confirmation: React.FC = () => {
     }
   }, [booking, navigate]);
 
+  // Load bank phone from Firestore settings
+  useEffect(() => {
+    if (!booking || booking.payment_method !== 'bank_transfer') return;
+    getDoc(doc(db, 'settings', 'property_details'))
+      .then(snap => {
+        if (snap.exists() && snap.data().bankPhone) {
+          setBankPhone(snap.data().bankPhone);
+        }
+      })
+      .catch(console.error);
+  }, [booking]);
+
   if (!booking) return null;
 
   const isThawani = booking.payment_method === 'thawani';
   const isBankTransfer = booking.payment_method === 'bank_transfer';
 
-  const deposit = booking.security_deposit || 0;
-  const stayTotal = booking.total_amount - deposit;
+  const deposit = Number(booking.depositAmount) || Number(booking.security_deposit) || 0;
+  const stayTotal = Number(booking.stayTotal) || (Number(booking.grandTotal || booking.total_amount) - deposit);
+  const grandTotal = Number(booking.grandTotal) || Number(booking.total_amount) || (stayTotal + deposit);
+
+  const isDayUse = booking.check_in === booking.check_out;
+  const stayLabel = isDayUse
+    ? (booking.slot_name ? `${booking.slot_name} — ${propertyName}` : `Day Use — ${propertyName}`)
+    : `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`;
 
   const handleViewInvoice = () => {
     const doc = generateInvoicePDF({
@@ -33,11 +55,11 @@ export const Confirmation: React.FC = () => {
       guest_name: booking.guest_name,
       room_type: propertyName,
       issued_date: booking.created_at,
-      subtotal: booking.total_amount,
+      subtotal: grandTotal,
       vat_amount: 0,
-      total_amount: booking.total_amount,
+      total_amount: grandTotal,
       items: [
-        { description: `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`, amount: stayTotal },
+        { description: stayLabel, amount: stayTotal },
         ...(deposit > 0 ? [{ description: 'Refundable Security Deposit', amount: deposit }] : []),
       ],
     });
@@ -102,7 +124,9 @@ export const Confirmation: React.FC = () => {
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Duration</p>
-              <p className="font-bold text-primary-navy text-sm">{booking.nights} Night{booking.nights > 1 ? 's' : ''}</p>
+              <p className="font-bold text-primary-navy text-sm">
+                {isDayUse ? (booking.slot_name || 'Day Use') : `${booking.nights} Night${booking.nights > 1 ? 's' : ''}`}
+              </p>
             </div>
           </div>
 
@@ -119,7 +143,7 @@ export const Confirmation: React.FC = () => {
             )}
             <div className="flex justify-between text-sm pt-2 border-t border-primary-navy/5">
               <span className="font-bold text-primary-navy">Grand Total</span>
-              <span className="font-bold text-secondary-gold font-headline text-lg">{booking.total_amount} OMR</span>
+              <span className="font-bold text-secondary-gold font-headline text-lg">{grandTotal} OMR</span>
             </div>
           </div>
 
@@ -146,10 +170,15 @@ export const Confirmation: React.FC = () => {
           )}
 
           {isBankTransfer && (
-            <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4">
+            <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4 space-y-2">
               <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
                 Your tax invoice will be generated once our team approves your bank transfer.
               </p>
+              {bankPhone.trim() && (
+                <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
+                  <span className="font-bold">Mobile Transfer (WhatsApp/Bank App):</span> {bankPhone}
+                </p>
+              )}
             </div>
           )}
 

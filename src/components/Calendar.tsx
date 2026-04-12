@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { formatTime } from '../services/pricingUtils';
 import type { Transaction } from '../types';
 
 interface RealtimeBooking {
@@ -20,9 +22,13 @@ interface RealtimeBooking {
   status: string;
   payment_status: string;
   created_at: string;
+  slot_name?: string;
+  slot_start_time?: string;
+  slot_end_time?: string;
 }
 
 export const Calendar: React.FC = () => {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,17 +65,17 @@ export const Calendar: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Build a map of day -> booking status for current month
-  const getBookedDayMap = (): Map<number, 'pending' | 'confirmed'> => {
-    const dayMap = new Map<number, 'pending' | 'confirmed'>();
+  // Build a map of day -> booking info for current month
+  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }> => {
+    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }>();
 
     for (const b of bookings) {
       if (b.status === 'cancelled') continue;
 
       const checkIn = new Date(b.check_in);
       const checkOut = new Date(b.check_out);
+      const bIsDayUse = b.check_in === b.check_out;
 
-      // Only consider bookings that overlap with the current displayed month
       const monthStart = new Date(currentYear, currentMonth, 1);
       const monthEnd = new Date(currentYear, currentMonth + 1, 0);
 
@@ -82,11 +88,15 @@ export const Calendar: React.FC = () => {
 
       for (let d = startDay; d <= endDay; d++) {
         const existing = dayMap.get(d);
-        // confirmed takes priority over pending
-        if (b.status === 'confirmed' || b.status === 'checked-in') {
-          dayMap.set(d, 'confirmed');
-        } else if (b.status === 'pending' && existing !== 'confirmed') {
-          dayMap.set(d, 'pending');
+        const statusVal = (b.status === 'confirmed' || b.status === 'checked-in') ? 'confirmed' as const : 'pending' as const;
+
+        if (existing) {
+          existing.bookings.push(b);
+          if (statusVal === 'confirmed') existing.status = 'confirmed';
+          // If any booking on this day is NOT day-use, mark as full
+          if (!bIsDayUse) existing.isDayUse = false;
+        } else {
+          dayMap.set(d, { status: statusVal, isDayUse: bIsDayUse, bookings: [b] });
         }
       }
     }
@@ -181,32 +191,65 @@ export const Calendar: React.FC = () => {
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const isToday = day === todayDay;
-            const bookingStatus = bookedDayMap.get(day);
+            const entry = bookedDayMap.get(day);
+            const bookingStatus = entry?.status;
+            const isDayUseDay = entry?.isDayUse;
+            const dayBookings = entry?.bookings || [];
 
             return (
               <div
                 key={day}
                 className={cn(
-                  "relative text-sm font-medium p-2 rounded-lg transition-all",
+                  "relative text-sm font-medium p-1.5 rounded-lg transition-all flex flex-col items-center min-h-[3rem]",
                   isToday && !bookingStatus && "bg-primary-navy text-white font-bold",
-                  bookingStatus === 'confirmed' && "text-white font-bold",
+                  bookingStatus === 'confirmed' && !isDayUseDay && "text-white font-bold",
+                  bookingStatus === 'confirmed' && isDayUseDay && "font-bold",
                   bookingStatus === 'pending' && "text-primary-navy font-bold",
                   !isToday && !bookingStatus && "text-primary-navy",
                 )}
                 style={
-                  bookingStatus === 'confirmed' ? { backgroundColor: '#2E7D32' } :
+                  bookingStatus === 'confirmed' && !isDayUseDay ? { backgroundColor: '#2E7D32' } :
+                  bookingStatus === 'confirmed' && isDayUseDay ? { backgroundColor: '#2E7D32', backgroundImage: 'linear-gradient(135deg, #2E7D32 50%, transparent 50%)', color: '#2E7D32' } :
                   bookingStatus === 'pending' ? { backgroundColor: '#FFD700' } :
                   undefined
                 }
               >
                 {day}
+                {isDayUseDay && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-secondary-gold text-primary-navy rounded-full text-[7px] font-bold flex items-center justify-center leading-none">D</span>
+                )}
+                {dayBookings.length > 0 && (
+                  <div className="w-full mt-0.5 space-y-px overflow-hidden">
+                    {dayBookings.slice(0, 2).map((b) => (
+                      <p
+                        key={b.id}
+                        className={cn(
+                          "text-[6px] leading-tight font-bold truncate text-center",
+                          bookingStatus === 'confirmed' && !isDayUseDay ? "text-white/80" :
+                          bookingStatus === 'pending' ? "text-primary-navy/70" :
+                          "text-current opacity-70"
+                        )}
+                      >
+                        {b.guest_name.split(' ')[0]}
+                      </p>
+                    ))}
+                    {dayBookings.length > 2 && (
+                      <p className={cn(
+                        "text-[6px] leading-tight font-bold text-center",
+                        bookingStatus === 'confirmed' && !isDayUseDay ? "text-white/60" : "text-primary-navy/50"
+                      )}>
+                        +{dayBookings.length - 2}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
         {/* Legend */}
-        <div className="mt-6 flex items-center gap-6">
+        <div className="mt-6 flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#2E7D32' }}></span>
             <span className="text-[10px] font-bold uppercase text-primary-navy/60">Confirmed</span>
@@ -214,6 +257,10 @@ export const Calendar: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#FFD700' }}></span>
             <span className="text-[10px] font-bold uppercase text-primary-navy/60">Pending</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="relative w-3 h-3 rounded bg-secondary-gold"><span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Day Use</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded bg-primary-navy"></span>
@@ -225,7 +272,7 @@ export const Calendar: React.FC = () => {
       <section className="space-y-4">
         <div className="flex justify-between items-end px-1">
           <h3 className="font-headline text-lg font-bold text-primary-navy">Next Arrivals</h3>
-          <button className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">View All</button>
+          <button onClick={() => navigate('/admin/guests')} className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">View All</button>
         </div>
         <div className="space-y-3">
           {upcomingArrivals.map((arrival, i) => (
@@ -240,7 +287,11 @@ export const Calendar: React.FC = () => {
                 <div>
                   <p className="font-bold text-sm text-primary-navy">{arrival.guest_name}</p>
                   <p className="text-xs text-primary-navy/40 font-medium">
-                    {arrival.property_name} &bull; {new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - {new Date(arrival.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
+                    {arrival.property_name} &bull; {arrival.slot_name
+                      ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!)} – ${formatTime(arrival.slot_end_time!)}`
+                      : arrival.check_in === arrival.check_out
+                        ? 'Day Use'
+                        : `${new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - ${new Date(arrival.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}`}
                   </p>
                 </div>
               </div>

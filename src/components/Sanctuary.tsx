@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, MessageCircle } from 'lucide-react';
+import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface PricingSettings {
-  weekday_rate: number;
-  thursday_rate: number;
-  friday_rate: number;
-  saturday_rate: number;
+  sunday_rate?: number;
+  monday_rate?: number;
+  tuesday_rate?: number;
+  wednesday_rate?: number;
+  thursday_rate?: number;
+  friday_rate?: number;
+  saturday_rate?: number;
+  day_use_rate?: number;
+  weekday_rate?: number;
   special_dates?: { date: string; price: number }[];
   discount?: { enabled: boolean; type: 'percent' | 'flat'; value: number; start_date: string; end_date: string };
 }
@@ -144,9 +149,15 @@ export const Sanctuary: React.FC = () => {
           <span className="font-bold text-secondary-gold">From {(() => {
             const p = data.pricing;
             if (!p) return data.nightly_rate;
-            const baseRates = [p.weekday_rate, p.thursday_rate, p.friday_rate, p.saturday_rate];
+            const dayRates = [
+              p.sunday_rate, p.monday_rate, p.tuesday_rate, p.wednesday_rate,
+              p.thursday_rate, p.friday_rate, p.saturday_rate, p.day_use_rate,
+              // Legacy fallback
+              p.weekday_rate,
+            ];
             const specialPrices = (p.special_dates || []).map(s => s.price);
-            const allRates = [...baseRates, ...specialPrices].filter(r => r > 0);
+            const allRates = [...dayRates, ...specialPrices].filter((r): r is number => typeof r === 'number' && r > 0);
+            if (allRates.length === 0) return data.nightly_rate;
             let minRate = Math.min(...allRates);
             if (p.discount?.enabled && p.discount.value > 0) {
               if (p.discount.type === 'percent') {
@@ -184,12 +195,12 @@ export const Sanctuary: React.FC = () => {
           <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
         </div>
         <div className="flex gap-8 mt-2">
-          <button className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
-            <span className="material-symbols-outlined">camera</span>
-          </button>
-          <button className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+          <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+            <Instagram size={20} />
+          </a>
+          <a href="https://wa.me/96891000001" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
             <MessageCircle size={20} />
-          </button>
+          </a>
         </div>
         <p className="text-[10px] text-center text-primary-navy/40 font-bold">
           &copy; Al-Nakheel Luxury Chalet. 2024

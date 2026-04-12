@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check, FileText, X, Download } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
+import { downloadTermsPDF } from '../services/pdf';
 import { sendWhatsAppInvoice } from './Invoices';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { calculateTotalPrice, formatBreakdown, type PricingSettings, type PriceBreakdown } from '../services/pricingUtils';
+import { calculateTotalPrice, formatBreakdown, migratePricing, formatTime, getSlotRateForDay, type PricingSettings, type PriceBreakdown, type DayUseSlot } from '../services/pricingUtils';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -45,6 +46,23 @@ export const Booking: React.FC = () => {
   // Dynamic pricing from Firestore
   const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
 
+  // Dynamic bank details from Firestore
+  const [bankDetails, setBankDetails] = useState({ bank_name: 'Bank Muscat', account_name: 'Al-Nakheel Luxury Properties LLC', iban: 'OM12 0123 0000 0012 3456 789', bankPhone: '' });
+
+  // Day-use slots
+  const [dayUseSlots, setDayUseSlots] = useState<DayUseSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<DayUseSlot | null>(null);
+  const [bookedSlots, setBookedSlots] = useState<Map<string, string[]>>(new Map());
+
+  // Thawani simulation state
+  const [thawaniSimulating, setThawaniSimulating] = useState(false);
+
+  // Terms of Stay
+  const [termsOfStay, setTermsOfStay] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsNudge, setTermsNudge] = useState(false);
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -59,19 +77,32 @@ export const Booking: React.FC = () => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const dates = new Set<string>();
+      const slotMap = new Map<string, string[]>();
+
       snapshot.docs.forEach(d => {
         const data = d.data();
         if (data.status === 'cancelled') return;
 
-        const checkIn = new Date(data.check_in);
-        const checkOut = new Date(data.check_out);
-        const cursor = new Date(checkIn);
-        while (cursor <= checkOut) {
-          dates.add(cursor.toISOString().split('T')[0]);
-          cursor.setDate(cursor.getDate() + 1);
+        const bIsDayUse = data.check_in === data.check_out;
+
+        if (bIsDayUse && data.slot_id) {
+          // Slot-based day-use: only block that slot, not the whole day
+          const existing = slotMap.get(data.check_in) || [];
+          existing.push(data.slot_id);
+          slotMap.set(data.check_in, existing);
+        } else {
+          // Overnight or non-slot day-use: block entire days
+          const checkIn = new Date(data.check_in);
+          const checkOut = new Date(data.check_out);
+          const cursor = new Date(checkIn);
+          while (cursor <= checkOut) {
+            dates.add(cursor.toISOString().split('T')[0]);
+            cursor.setDate(cursor.getDate() + 1);
+          }
         }
       });
       setBookedDates(dates);
+      setBookedSlots(slotMap);
     });
     return () => unsubscribe();
   }, []);
@@ -87,12 +118,28 @@ export const Booking: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load dynamic pricing settings
+  // Load dynamic pricing settings + bank details
   useEffect(() => {
     getDoc(doc(db, 'settings', 'property_details'))
       .then(snap => {
-        if (snap.exists() && snap.data().pricing) {
-          setPricingSettings(snap.data().pricing as PricingSettings);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.pricing) {
+            const migrated = migratePricing(data.pricing);
+            setPricingSettings(migrated);
+            if (migrated.day_use_slots?.length) setDayUseSlots(migrated.day_use_slots);
+          }
+          if (data.bank_name || data.account_name || data.iban) {
+            setBankDetails(prev => ({
+              bank_name: data.bank_name || prev.bank_name,
+              account_name: data.account_name || prev.account_name,
+              iban: data.iban || prev.iban,
+              bankPhone: data.bankPhone || '',
+            }));
+          }
+          if (data.termsOfStay) {
+            setTermsOfStay(data.termsOfStay);
+          }
         }
       })
       .catch(console.error);
@@ -108,18 +155,44 @@ export const Booking: React.FC = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Compute which slots remain bookable for a date, accounting for time overlap
+  const getAvailableSlotsForDate = (dateStr: string): DayUseSlot[] => {
+    const taken = bookedSlots.get(dateStr) || [];
+    if (taken.length === 0) return dayUseSlots;
+    return dayUseSlots.filter(slot => {
+      if (taken.includes(slot.id)) return false;
+      // Check time overlap: if ANY booked slot's hours overlap this slot, block it
+      for (const takenId of taken) {
+        const takenSlot = dayUseSlots.find(s => s.id === takenId);
+        if (takenSlot && slot.start_time < takenSlot.end_time && slot.end_time > takenSlot.start_time) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
+
   const isDayBooked = (day: number): boolean => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return bookedDates.has(dateStr);
+    if (bookedDates.has(dateStr)) return true;
+    // If slots exist, check whether any slot is still available (overlap-aware)
+    if (dayUseSlots.length > 0) {
+      if (getAvailableSlotsForDate(dateStr).length === 0) return true;
+    }
+    return false;
   };
 
   const handleDayClick = (day: number) => {
     const clickedDate = new Date(currentYear, currentMonth, day);
     if (clickedDate < today) return;
     if (isDayBooked(day)) return;
+    setSelectedSlot(null);
 
     if (!selectedDates.start || (selectedDates.start && selectedDates.end)) {
       setSelectedDates({ start: day, end: null });
+    } else if (day === selectedDates.start) {
+      // Same day clicked twice → Day Use
+      setSelectedDates({ start: day, end: day });
     } else {
       // Check if any day in the range is booked
       const rangeStart = Math.min(day, selectedDates.start);
@@ -143,26 +216,38 @@ export const Booking: React.FC = () => {
     setErrors(prev => ({ ...prev, dates: '' }));
   };
 
+  const isDayUse = selectedDates.start !== null && selectedDates.end !== null && selectedDates.start === selectedDates.end;
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
   const securityDeposit = pricingSettings?.security_deposit ?? property?.security_deposit ?? 50;
 
+  // Available slots for selected day-use date (overlap-aware)
+  const availableSlots = isDayUse && selectedDates.start !== null
+    ? getAvailableSlotsForDate(`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`)
+    : [];
+
   // Dynamic pricing breakdown
   const priceBreakdown: PriceBreakdown | null = (() => {
-    if (!nights || !selectedDates.start || !selectedDates.end) return null;
+    if (selectedDates.start === null || selectedDates.end === null) return null;
+    if (!isDayUse && !nights) return null;
+    // Wait for slot selection when slots are defined
+    if (isDayUse && dayUseSlots.length > 0 && !selectedSlot) return null;
     const checkInStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
     const checkOutStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
     const fallbackRate = property?.nightly_rate || 120;
-    const pricing: PricingSettings = pricingSettings || {
+    const pricing: PricingSettings = pricingSettings || migratePricing({
       weekday_rate: fallbackRate,
       thursday_rate: fallbackRate,
       friday_rate: fallbackRate,
       saturday_rate: fallbackRate,
+      day_use_rate: Math.round(fallbackRate * 0.6),
       special_dates: [],
-    };
-    return calculateTotalPrice(checkInStr, checkOutStr, pricing);
+    });
+    return calculateTotalPrice(checkInStr, checkOutStr, pricing, selectedSlot?.id);
   })();
 
-  const total = (priceBreakdown?.total || 0) + securityDeposit;
+  const stayTotal = priceBreakdown?.total || 0;
+  const depositAmount = Number(securityDeposit) || 0;
+  const grandTotal = stayTotal + depositAmount;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -186,8 +271,18 @@ export const Booking: React.FC = () => {
       newErrors.dates = 'Please select check-in and check-out dates';
     }
 
+    if (isDayUse && dayUseSlots.length > 0 && !selectedSlot) {
+      newErrors.slot = 'Please select a time slot';
+    }
+
     if (paymentMethod === 'bank_transfer' && !receiptFile) {
       newErrors.receipt = 'Please upload your bank transfer receipt';
+    }
+
+    if (termsOfStay && !termsAccepted) {
+      newErrors.terms = 'Please accept the terms to proceed';
+      setTermsNudge(true);
+      setTimeout(() => setTermsNudge(false), 600);
     }
 
     setErrors(newErrors);
@@ -254,7 +349,7 @@ export const Booking: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validate() || !property || !selectedDates.start || !selectedDates.end) return;
+    if (!validate() || !property || selectedDates.start === null || selectedDates.end === null) return;
 
     setSubmitting(true);
     setSubmitError('');
@@ -266,9 +361,97 @@ export const Booking: React.FC = () => {
       // Upload receipt to Cloudinary if bank transfer
       let receiptURL: string | undefined;
       if (paymentMethod === 'bank_transfer' && receiptFile) {
-        receiptURL = await uploadToCloudinary(receiptFile);
+        try {
+          receiptURL = await uploadToCloudinary(receiptFile);
+        } catch (uploadErr: any) {
+          console.error('Receipt upload failed:', uploadErr.message);
+          setSubmitError(`Receipt upload failed: ${uploadErr.message}. Please try again.`);
+          setSubmitting(false);
+          return;
+        }
       }
 
+      // Thawani — simulate payment gateway for prototype demo
+      if (paymentMethod === 'thawani') {
+        setThawaniSimulating(true);
+
+        // Simulate 2-second network delay (Thawani redirect)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        let thawaniBooking: any = null;
+        let thawaniPropertyName = property.name;
+
+        try {
+          // Save booking to Firestore as paid
+          const termsTimestamp = new Date().toISOString();
+          const result = await bookingsApi.create({
+            property_id: property.id,
+            property_name: property.name,
+            guest_name: guestName.trim(),
+            guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+            guest_email: guestEmail || undefined,
+            check_in: checkIn,
+            check_out: checkOut,
+            nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
+            security_deposit: depositAmount,
+            stayTotal,
+            depositAmount,
+            grandTotal,
+            payment_method: 'thawani',
+            ...(selectedSlot ? {
+              slot_id: selectedSlot.id,
+              slot_name: selectedSlot.name,
+              slot_start_time: selectedSlot.start_time,
+              slot_end_time: selectedSlot.end_time,
+            } : {}),
+            ...(termsAccepted ? { termsAccepted: true, termsAcceptedAt: termsTimestamp } : {}),
+          });
+
+          thawaniBooking = result.booking;
+          thawaniPropertyName = result.property_name;
+
+          sendWhatsAppInvoice({
+            guest_name: guestName.trim(),
+            guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+            id: result.booking.id,
+          });
+        } catch (saveErr: any) {
+          console.error('Thawani booking save error (continuing to confirmation):', saveErr.message);
+          // Build a fallback booking object so the confirmation page still renders
+          thawaniBooking = {
+            id: `demo-${Date.now()}`,
+            guest_name: guestName.trim(),
+            guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+            check_in: checkIn,
+            check_out: checkOut,
+            nights: isDayUse ? 0 : nights,
+            nightly_rate: property.nightly_rate,
+            security_deposit: depositAmount,
+            stayTotal,
+            depositAmount,
+            grandTotal,
+            total_amount: grandTotal,
+            payment_method: 'thawani',
+            status: 'confirmed',
+            payment_status: 'paid',
+            created_at: new Date().toISOString(),
+          };
+        }
+
+        setThawaniSimulating(false);
+
+        // Always navigate — demo must never crash
+        navigate('/confirmation', {
+          state: {
+            booking: thawaniBooking,
+            propertyName: thawaniPropertyName,
+          },
+        });
+        return;
+      }
+
+      // Bank transfer — save booking to Firestore
+      const bankTermsTimestamp = new Date().toISOString();
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -277,10 +460,20 @@ export const Booking: React.FC = () => {
         guest_email: guestEmail || undefined,
         check_in: checkIn,
         check_out: checkOut,
-        nightly_rate: priceBreakdown ? Math.round(priceBreakdown.total / nights) : property.nightly_rate,
-        security_deposit: securityDeposit,
+        nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
+        security_deposit: depositAmount,
+        stayTotal,
+        depositAmount,
+        grandTotal,
         payment_method: paymentMethod,
         receiptURL,
+        ...(selectedSlot ? {
+          slot_id: selectedSlot.id,
+          slot_name: selectedSlot.name,
+          slot_start_time: selectedSlot.start_time,
+          slot_end_time: selectedSlot.end_time,
+        } : {}),
+        ...(termsAccepted ? { termsAccepted: true, termsAcceptedAt: bankTermsTimestamp } : {}),
       });
 
       // Trigger WhatsApp invoice (will connect API next)
@@ -297,9 +490,10 @@ export const Booking: React.FC = () => {
         },
       });
     } catch (err: any) {
-      console.error('Cloudinary Error Details:', err.response?.data || err.message);
+      console.error('Booking submission error:', err.response?.data || err.message || err);
       setSubmitError(err.message || 'Booking failed. Please try again.');
     } finally {
+      setThawaniSimulating(false);
       setSubmitting(false);
     }
   };
@@ -437,24 +631,82 @@ export const Booking: React.FC = () => {
 
         {errors.dates && <p className="text-red-500 text-xs mt-4 font-medium">{errors.dates}</p>}
 
-        {selectedDates.start && (
+        {selectedDates.start !== null && (
           <div className="mt-4 text-xs text-primary-navy/60 text-center">
-            {selectedDates.end
-              ? `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
-              : `Select check-out date`}
+            {selectedDates.end !== null
+              ? isDayUse
+                ? selectedSlot
+                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
+                  : dayUseSlots.length > 0
+                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use — select a time slot below)`
+                    : `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
+                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
+              : `Tap again for Day Use, or select check-out date`}
           </div>
         )}
       </motion.div>
 
+      {/* Day-Use Time Slot Selection */}
+      {isDayUse && dayUseSlots.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Select Time Slot *</label>
+          <div className="space-y-2">
+            {availableSlots.map(slot => {
+              const dow = new Date(currentYear, currentMonth, selectedDates.start!).getDay();
+              const rate = getSlotRateForDay(dow, slot);
+              const isSelected = selectedSlot?.id === slot.id;
+              return (
+                <button
+                  key={slot.id}
+                  onClick={() => { setSelectedSlot(isSelected ? null : slot); setErrors(prev => ({ ...prev, slot: '' })); }}
+                  className={cn(
+                    "w-full p-4 rounded-[16px] border-2 transition-all text-left flex items-center justify-between",
+                    isSelected
+                      ? "border-primary-navy bg-primary-navy/5"
+                      : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+                  )}
+                >
+                  <div>
+                    <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-secondary-gold font-headline">{rate} OMR</span>
+                    {isSelected && (
+                      <div className="w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+            {availableSlots.length === 0 && (
+              <p className="text-center text-sm text-primary-navy/40 py-4">All time slots are booked for this date</p>
+            )}
+          </div>
+          {errors.slot && <p className="text-red-500 text-xs font-medium">{errors.slot}</p>}
+        </motion.section>
+      )}
+
       {/* Pricing Summary */}
-      {nights > 0 && priceBreakdown && (
+      {priceBreakdown && (isDayUse || nights > 0) && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-surface-container-low p-6 rounded-[24px] space-y-4"
         >
           <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">Stay</span>
+            <div>
+              <span className="text-primary-navy/60 font-medium">{isDayUse ? 'Day Use' : 'Stay'}</span>
+              {priceBreakdown.slotTime && (
+                <p className="text-[10px] text-primary-navy/40 font-medium">{priceBreakdown.slotTime}</p>
+              )}
+            </div>
             <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
           </div>
 
@@ -481,11 +733,11 @@ export const Booking: React.FC = () => {
           <div className="pt-3 border-t border-primary-navy/5 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-primary-navy/60 font-medium">Stay Total</span>
-              <span className="font-bold text-primary-navy">{priceBreakdown.total} OMR</span>
+              <span className="font-bold text-primary-navy">{stayTotal} OMR</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-primary-navy/60 font-medium">Refundable Deposit</span>
-              <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
+              <span className="font-bold text-primary-navy">{depositAmount} OMR</span>
             </div>
           </div>
 
@@ -495,7 +747,7 @@ export const Booking: React.FC = () => {
               <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">Deposit refunded after checkout</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-secondary-gold font-headline">{total} OMR</p>
+              <p className="text-2xl font-bold text-secondary-gold font-headline">{grandTotal} OMR</p>
             </div>
           </div>
         </motion.section>
@@ -558,7 +810,7 @@ export const Booking: React.FC = () => {
       </section>
 
       {/* Payment Method Selection */}
-      {nights > 0 && (
+      {(isDayUse || nights > 0) && (
         <section className="space-y-4">
           <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Payment Method *</label>
           <div className="grid grid-cols-2 gap-3">
@@ -613,9 +865,12 @@ export const Booking: React.FC = () => {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
                 <p className="text-xs font-bold text-amber-800">Bank Transfer Details</p>
                 <div className="text-xs text-amber-700 space-y-1">
-                  <p><span className="font-bold">Bank:</span> Bank Muscat</p>
-                  <p><span className="font-bold">Account:</span> Al-Nakheel Luxury Properties LLC</p>
-                  <p><span className="font-bold">IBAN:</span> OM12 0123 0000 0012 3456 789</p>
+                  <p><span className="font-bold">Bank:</span> {bankDetails.bank_name}</p>
+                  <p><span className="font-bold">Account:</span> {bankDetails.account_name}</p>
+                  <p><span className="font-bold">IBAN:</span> {bankDetails.iban}</p>
+                  {bankDetails.bankPhone.trim() && (
+                    <p><span className="font-bold">Mobile Transfer (WhatsApp/Bank App):</span> {bankDetails.bankPhone}</p>
+                  )}
                   <p><span className="font-bold">Reference:</span> Your phone number</p>
                 </div>
               </div>
@@ -653,6 +908,51 @@ export const Booking: React.FC = () => {
       )}
 
       <div className="space-y-4 pt-4">
+        {/* Terms of Stay Checkbox */}
+        {termsOfStay && (isDayUse || nights > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={termsNudge ? { opacity: 1, y: 0, x: [0, -6, 6, -4, 4, 0] } : { opacity: 1, y: 0 }}
+            transition={termsNudge ? { duration: 0.4 } : undefined}
+            className={cn(
+              "rounded-[16px] p-4 transition-colors",
+              errors.terms ? "bg-red-50 border border-red-200" : "bg-surface-container-low border border-primary-navy/5"
+            )}
+          >
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-0.5 flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => { setTermsAccepted(e.target.checked); setErrors(prev => ({ ...prev, terms: '' })); }}
+                  className="sr-only"
+                />
+                <div className={cn(
+                  "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                  termsAccepted ? "bg-primary-navy border-primary-navy" : errors.terms ? "border-red-300 bg-red-50" : "border-primary-navy/20 bg-white"
+                )}>
+                  {termsAccepted && <Check size={12} className="text-white" />}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-primary-navy leading-relaxed">
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }}
+                    className="text-secondary-gold font-bold underline underline-offset-2 hover:text-secondary-gold/80 transition-colors"
+                  >
+                    Terms of Stay
+                  </button>
+                </p>
+                {errors.terms && (
+                  <p className="text-red-500 text-[10px] font-bold">{errors.terms}</p>
+                )}
+              </div>
+            </label>
+          </motion.div>
+        )}
+
         {/* Upload Progress Bar */}
         {uploadProgress !== null && (
           <motion.div
@@ -677,14 +977,22 @@ export const Booking: React.FC = () => {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || nights === 0 || maintenanceMode}
+          disabled={submitting || (!isDayUse && nights === 0) || maintenanceMode || (!!termsOfStay && !termsAccepted)}
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (
-            uploadProgress !== null ? (
+            thawaniSimulating ? (
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="text-xs normal-case tracking-normal font-medium">Redirecting to Thawani Secure Payment...</span>
+              </div>
+            ) : uploadProgress !== null ? (
               <span className="text-xs">Uploading Receipt...</span>
             ) : (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="text-xs normal-case tracking-normal font-medium">Processing...</span>
+              </div>
             )
           ) : paymentMethod === 'bank_transfer' ? (
             <>
@@ -693,8 +1001,8 @@ export const Booking: React.FC = () => {
             </>
           ) : (
             <>
-              Proceed to Secure Payment
-              <span className="text-[10px] opacity-40 lowercase font-normal">(via Thawani)</span>
+              Pay with Thawani
+              <span className="text-[10px] opacity-40 lowercase font-normal">({grandTotal} OMR)</span>
             </>
           )}
         </button>
@@ -707,6 +1015,72 @@ export const Booking: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Terms of Stay Modal */}
+      <AnimatePresence>
+        {showTermsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            onClick={() => setShowTermsModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full sm:max-w-lg sm:rounded-[24px] rounded-t-[24px] overflow-hidden shadow-2xl max-h-[85vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-5 border-b border-primary-navy/5 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-navy flex items-center justify-center rounded-lg">
+                    <FileText className="text-secondary-gold" size={20} />
+                  </div>
+                  <div>
+                    <p className="font-headline text-sm font-bold text-primary-navy">Terms of Stay</p>
+                    <p className="text-[10px] text-primary-navy/40 uppercase tracking-widest font-bold">Al-Nakheel Sanctuary</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-primary-navy/5 rounded-full transition-colors">
+                  <X size={18} className="text-primary-navy/40" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="text-sm text-primary-navy/80 leading-relaxed whitespace-pre-wrap font-medium">
+                  {termsOfStay}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 border-t border-primary-navy/5 flex-shrink-0 space-y-2.5">
+                <button
+                  onClick={() => {
+                    setTermsAccepted(true);
+                    setErrors(prev => ({ ...prev, terms: '' }));
+                    setShowTermsModal(false);
+                  }}
+                  className="w-full bg-primary-navy text-white py-4 rounded-[16px] font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Check size={16} />
+                  I Accept the Terms
+                </button>
+                <button
+                  onClick={() => downloadTermsPDF(termsOfStay)}
+                  className="w-full border-2 border-primary-navy/10 text-primary-navy/60 py-3.5 rounded-[16px] font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:border-primary-navy/20 hover:text-primary-navy"
+                >
+                  <Download size={14} />
+                  Download Terms as PDF
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

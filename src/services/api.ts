@@ -35,9 +35,18 @@ export const bookingsApi = {
     check_out: string;
     nightly_rate: number;
     security_deposit: number;
+    stayTotal?: number;
+    depositAmount?: number;
+    grandTotal?: number;
     payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
     receipt_image?: string;
     receiptURL?: string;
+    slot_id?: string;
+    slot_name?: string;
+    slot_start_time?: string;
+    slot_end_time?: string;
+    termsAccepted?: boolean;
+    termsAcceptedAt?: string;
   }) => {
     const booking = await firestoreBookings.create(data);
     return { booking, property_name: data.property_name };

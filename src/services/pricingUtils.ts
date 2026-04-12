@@ -1,9 +1,27 @@
-export interface PricingSettings {
-  weekday_rate: number;   // Sun–Wed
+export interface DayUseSlot {
+  id: string;
+  name: string;
+  start_time: string;  // HH:MM
+  end_time: string;    // HH:MM
+  sunday_rate: number;
+  monday_rate: number;
+  tuesday_rate: number;
+  wednesday_rate: number;
   thursday_rate: number;
   friday_rate: number;
   saturday_rate: number;
-  security_deposit: number; // Refundable — excluded from revenue/tax
+}
+
+export interface PricingSettings {
+  sunday_rate: number;
+  monday_rate: number;
+  tuesday_rate: number;
+  wednesday_rate: number;
+  thursday_rate: number;
+  friday_rate: number;
+  saturday_rate: number;
+  day_use_rate: number;         // Same-day "Day Use" price (e.g. 12 PM – 10 PM)
+  security_deposit: number;     // Refundable — excluded from revenue/tax
   special_dates: { date: string; price: number }[];  // YYYY-MM-DD
   discount?: {
     enabled: boolean;
@@ -12,40 +30,152 @@ export interface PricingSettings {
     start_date: string;
     end_date: string;
   };
+  day_use_slots?: DayUseSlot[];
+  // Legacy compat — ignored if individual days are set
+  weekday_rate?: number;
 }
 
 export interface PriceBreakdown {
   nights: number;
-  weekday_nights: number;
-  thursday_nights: number;
-  friday_nights: number;
-  saturday_nights: number;
-  special_nights: number;
+  isDayUse: boolean;
   subtotal: number;
   discount_amount: number;
   total: number;
   per_night: { date: string; dayLabel: string; rate: number; isSpecial: boolean }[];
+  slotName?: string;
+  slotTime?: string;
 }
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** Format 24h time string to readable format (e.g. "14:00" → "2 PM") */
+export function formatTime(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+/** Get the slot rate for a given day-of-week */
+export function getSlotRateForDay(dow: number, slot: DayUseSlot): number {
+  switch (dow) {
+    case 0: return slot.sunday_rate;
+    case 1: return slot.monday_rate;
+    case 2: return slot.tuesday_rate;
+    case 3: return slot.wednesday_rate;
+    case 4: return slot.thursday_rate;
+    case 5: return slot.friday_rate;
+    case 6: return slot.saturday_rate;
+    default: return slot.sunday_rate;
+  }
+}
+
+/** Get the nightly rate for a given day-of-week (0=Sun … 6=Sat) */
+function getRateForDay(dow: number, pricing: PricingSettings): number {
+  switch (dow) {
+    case 0: return pricing.sunday_rate;
+    case 1: return pricing.monday_rate;
+    case 2: return pricing.tuesday_rate;
+    case 3: return pricing.wednesday_rate;
+    case 4: return pricing.thursday_rate;
+    case 5: return pricing.friday_rate;
+    case 6: return pricing.saturday_rate;
+    default: return pricing.sunday_rate;
+  }
+}
+
+/** Get all 7 nightly rates as an array */
+export function getAllRates(pricing: PricingSettings): number[] {
+  return [
+    pricing.sunday_rate, pricing.monday_rate, pricing.tuesday_rate,
+    pricing.wednesday_rate, pricing.thursday_rate, pricing.friday_rate,
+    pricing.saturday_rate,
+  ];
+}
+
 export function calculateTotalPrice(
   checkIn: string,
   checkOut: string,
-  pricing: PricingSettings
+  pricing: PricingSettings,
+  slotId?: string
 ): PriceBreakdown {
   const start = new Date(checkIn);
   const end = new Date(checkOut);
   const specialMap = new Map(pricing.special_dates.map(s => [s.date, s.price]));
 
+  // Day Use: check-in === check-out
+  const isDayUse = checkIn === checkOut;
+  if (isDayUse) {
+    const dateStr = start.toISOString().split('T')[0];
+    const dow = start.getDay();
+    const dayLabel = DAY_LABELS[dow];
+
+    // Slot-based pricing
+    if (slotId && pricing.day_use_slots?.length) {
+      const slot = pricing.day_use_slots.find(s => s.id === slotId);
+      if (slot) {
+        let rate = getSlotRateForDay(dow, slot);
+        const isSpecial = specialMap.has(dateStr);
+        if (isSpecial) rate = specialMap.get(dateStr)!;
+
+        let discountAmount = 0;
+        if (pricing.discount?.enabled && pricing.discount.start_date && pricing.discount.end_date) {
+          if (dateStr >= pricing.discount.start_date && dateStr <= pricing.discount.end_date) {
+            if (pricing.discount.type === 'percent') {
+              discountAmount = Math.round(rate * (pricing.discount.value / 100) * 100) / 100;
+            } else {
+              discountAmount = pricing.discount.value;
+            }
+          }
+        }
+
+        return {
+          nights: 0,
+          isDayUse: true,
+          subtotal: rate,
+          discount_amount: discountAmount,
+          total: Math.max(0, rate - discountAmount),
+          per_night: [{ date: dateStr, dayLabel, rate, isSpecial }],
+          slotName: slot.name,
+          slotTime: `${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`,
+        };
+      }
+    }
+
+    // Fallback: flat day_use_rate
+    let rate = pricing.day_use_rate || 0;
+    const isSpecial = specialMap.has(dateStr);
+    if (isSpecial) rate = specialMap.get(dateStr)!;
+
+    let discountAmount = 0;
+    if (pricing.discount?.enabled && pricing.discount.start_date && pricing.discount.end_date) {
+      if (dateStr >= pricing.discount.start_date && dateStr <= pricing.discount.end_date) {
+        if (pricing.discount.type === 'percent') {
+          discountAmount = Math.round(rate * (pricing.discount.value / 100) * 100) / 100;
+        } else {
+          discountAmount = pricing.discount.value;
+        }
+      }
+    }
+
+    return {
+      nights: 0,
+      isDayUse: true,
+      subtotal: rate,
+      discount_amount: discountAmount,
+      total: Math.max(0, rate - discountAmount),
+      per_night: [{ date: dateStr, dayLabel, rate, isSpecial }],
+    };
+  }
+
+  // Multi-night stay
   const perNight: PriceBreakdown['per_night'] = [];
-  let weekday = 0, thu = 0, fri = 0, sat = 0, special = 0;
   let subtotal = 0;
 
   const cursor = new Date(start);
   while (cursor < end) {
     const dateStr = cursor.toISOString().split('T')[0];
-    const dow = cursor.getDay(); // 0=Sun
+    const dow = cursor.getDay();
     const dayLabel = DAY_LABELS[dow];
 
     let rate: number;
@@ -54,19 +184,8 @@ export function calculateTotalPrice(
     if (specialMap.has(dateStr)) {
       rate = specialMap.get(dateStr)!;
       isSpecial = true;
-      special++;
-    } else if (dow === 4) { // Thursday
-      rate = pricing.thursday_rate;
-      thu++;
-    } else if (dow === 5) { // Friday
-      rate = pricing.friday_rate;
-      fri++;
-    } else if (dow === 6) { // Saturday
-      rate = pricing.saturday_rate;
-      sat++;
-    } else { // Sun–Wed
-      rate = pricing.weekday_rate;
-      weekday++;
+    } else {
+      rate = getRateForDay(dow, pricing);
     }
 
     subtotal += rate;
@@ -79,7 +198,6 @@ export function calculateTotalPrice(
   if (pricing.discount?.enabled && pricing.discount.start_date && pricing.discount.end_date) {
     const discStart = pricing.discount.start_date;
     const discEnd = pricing.discount.end_date;
-    // Check if any night falls within discount range
     const overlapping = perNight.filter(n => n.date >= discStart && n.date <= discEnd);
     if (overlapping.length > 0) {
       if (pricing.discount.type === 'percent') {
@@ -92,11 +210,7 @@ export function calculateTotalPrice(
 
   return {
     nights: perNight.length,
-    weekday_nights: weekday,
-    thursday_nights: thu,
-    friday_nights: fri,
-    saturday_nights: sat,
-    special_nights: special,
+    isDayUse: false,
     subtotal,
     discount_amount: discountAmount,
     total: Math.max(0, subtotal - discountAmount),
@@ -104,13 +218,31 @@ export function calculateTotalPrice(
   };
 }
 
-/** Build a human-readable breakdown string like "3 Nights (2 Weekdays, 1 Friday)" */
+/** Build a human-readable breakdown string */
 export function formatBreakdown(b: PriceBreakdown): string {
-  const parts: string[] = [];
-  if (b.weekday_nights > 0) parts.push(`${b.weekday_nights} Weekday${b.weekday_nights > 1 ? 's' : ''}`);
-  if (b.thursday_nights > 0) parts.push(`${b.thursday_nights} Thu`);
-  if (b.friday_nights > 0) parts.push(`${b.friday_nights} Fri`);
-  if (b.saturday_nights > 0) parts.push(`${b.saturday_nights} Sat`);
-  if (b.special_nights > 0) parts.push(`${b.special_nights} Special`);
-  return `${b.nights} Night${b.nights > 1 ? 's' : ''} (${parts.join(', ')})`;
+  if (b.isDayUse) return b.slotName ? `${b.slotName} Slot` : 'Day Use';
+  return `${b.nights} Night${b.nights > 1 ? 's' : ''}`;
+}
+
+/** Migrate legacy 4-rate pricing to 7-day format */
+export function migratePricing(raw: any): PricingSettings {
+  // If already has sunday_rate, it's the new format
+  if (raw.sunday_rate !== undefined) return raw as PricingSettings;
+
+  // Migrate from legacy weekday_rate / thursday / friday / saturday
+  const weekday = raw.weekday_rate || 120;
+  return {
+    sunday_rate: weekday,
+    monday_rate: weekday,
+    tuesday_rate: weekday,
+    wednesday_rate: weekday,
+    thursday_rate: raw.thursday_rate || weekday,
+    friday_rate: raw.friday_rate || weekday,
+    saturday_rate: raw.saturday_rate || weekday,
+    day_use_rate: raw.day_use_rate || Math.round(weekday * 0.6),
+    security_deposit: raw.security_deposit || 50,
+    special_dates: raw.special_dates || [],
+    day_use_slots: raw.day_use_slots || [],
+    discount: raw.discount,
+  };
 }
