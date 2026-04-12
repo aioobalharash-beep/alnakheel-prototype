@@ -295,13 +295,14 @@ export const Dashboard: React.FC = () => {
               const hasBooking = !!dayInfo;
               const isDayUseDay = dayInfo?.isDayUse;
               const isSelected = selectedDay === day;
+              const dayBookings = dayInfo?.bookings || [];
 
               return (
                 <span
                   key={day}
                   onClick={() => hasBooking && setSelectedDay(isSelected ? null : day)}
                   className={cn(
-                    "py-1.5 font-medium rounded-lg transition-all text-xs relative",
+                    "py-1 font-medium rounded-lg transition-all text-xs relative flex flex-col items-center min-h-[2.5rem]",
                     hasBooking ? "cursor-pointer hover:opacity-80" : "",
                     isToday && !hasBooking && "bg-primary-navy text-white font-bold",
                     !isToday && !hasBooking && "text-primary-navy/80",
@@ -317,6 +318,31 @@ export const Dashboard: React.FC = () => {
                   {day}
                   {isDayUseDay && (
                     <span className="absolute -top-1 -right-1 w-3 h-3 bg-secondary-gold text-primary-navy rounded-full text-[6px] font-bold flex items-center justify-center leading-none">D</span>
+                  )}
+                  {dayBookings.length > 0 && (
+                    <span className="w-full mt-px overflow-hidden flex flex-col items-center">
+                      {dayBookings.slice(0, 2).map((b) => (
+                        <span
+                          key={b.id}
+                          className={cn(
+                            "text-[5px] leading-tight font-bold truncate max-w-full block text-center",
+                            hasBooking && dayInfo!.status === 'confirmed' && !isDayUseDay ? "text-white/80" :
+                            hasBooking && dayInfo!.status === 'pending' ? "text-primary-navy/70" :
+                            "opacity-70"
+                          )}
+                        >
+                          {b.guest_name.split(' ')[0]}
+                        </span>
+                      ))}
+                      {dayBookings.length > 2 && (
+                        <span className={cn(
+                          "text-[5px] leading-tight font-bold text-center",
+                          hasBooking && dayInfo!.status === 'confirmed' && !isDayUseDay ? "text-white/60" : "text-primary-navy/50"
+                        )}>
+                          +{dayBookings.length - 2}
+                        </span>
+                      )}
+                    </span>
                   )}
                 </span>
               );

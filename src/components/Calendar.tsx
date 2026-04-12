@@ -66,8 +66,8 @@ export const Calendar: React.FC = () => {
   }, []);
 
   // Build a map of day -> booking info for current month
-  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean }> => {
-    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean }>();
+  const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }> => {
+    const dayMap = new Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }>();
 
     for (const b of bookings) {
       if (b.status === 'cancelled') continue;
@@ -91,11 +91,12 @@ export const Calendar: React.FC = () => {
         const statusVal = (b.status === 'confirmed' || b.status === 'checked-in') ? 'confirmed' as const : 'pending' as const;
 
         if (existing) {
+          existing.bookings.push(b);
           if (statusVal === 'confirmed') existing.status = 'confirmed';
           // If any booking on this day is NOT day-use, mark as full
           if (!bIsDayUse) existing.isDayUse = false;
         } else {
-          dayMap.set(d, { status: statusVal, isDayUse: bIsDayUse });
+          dayMap.set(d, { status: statusVal, isDayUse: bIsDayUse, bookings: [b] });
         }
       }
     }
@@ -193,12 +194,13 @@ export const Calendar: React.FC = () => {
             const entry = bookedDayMap.get(day);
             const bookingStatus = entry?.status;
             const isDayUseDay = entry?.isDayUse;
+            const dayBookings = entry?.bookings || [];
 
             return (
               <div
                 key={day}
                 className={cn(
-                  "relative text-sm font-medium p-2 rounded-lg transition-all",
+                  "relative text-sm font-medium p-1.5 rounded-lg transition-all flex flex-col items-center min-h-[3rem]",
                   isToday && !bookingStatus && "bg-primary-navy text-white font-bold",
                   bookingStatus === 'confirmed' && !isDayUseDay && "text-white font-bold",
                   bookingStatus === 'confirmed' && isDayUseDay && "font-bold",
@@ -215,6 +217,31 @@ export const Calendar: React.FC = () => {
                 {day}
                 {isDayUseDay && (
                   <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-secondary-gold text-primary-navy rounded-full text-[7px] font-bold flex items-center justify-center leading-none">D</span>
+                )}
+                {dayBookings.length > 0 && (
+                  <div className="w-full mt-0.5 space-y-px overflow-hidden">
+                    {dayBookings.slice(0, 2).map((b) => (
+                      <p
+                        key={b.id}
+                        className={cn(
+                          "text-[6px] leading-tight font-bold truncate text-center",
+                          bookingStatus === 'confirmed' && !isDayUseDay ? "text-white/80" :
+                          bookingStatus === 'pending' ? "text-primary-navy/70" :
+                          "text-current opacity-70"
+                        )}
+                      >
+                        {b.guest_name.split(' ')[0]}
+                      </p>
+                    ))}
+                    {dayBookings.length > 2 && (
+                      <p className={cn(
+                        "text-[6px] leading-tight font-bold text-center",
+                        bookingStatus === 'confirmed' && !isDayUseDay ? "text-white/60" : "text-primary-navy/50"
+                      )}>
+                        +{dayBookings.length - 2}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             );

@@ -291,7 +291,7 @@ export const firestoreBookings = {
       await addDoc(transactionsCol(), {
         type: 'payment',
         description: `Booking Payment - ${data.property_name}`,
-        amount: total,
+        amount: grandTotal,
         booking_id: docRef.id,
         date: new Date().toISOString().split('T')[0],
         created_at: new Date().toISOString(),
