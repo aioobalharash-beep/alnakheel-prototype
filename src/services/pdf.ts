@@ -129,3 +129,70 @@ export function downloadInvoicePDF(invoice: InvoiceData) {
   const doc = generateInvoicePDF(invoice);
   doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
 }
+
+export function downloadTermsPDF(termsText: string) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const maxWidth = pageWidth - margin * 2;
+  let y = 20;
+
+  // Header
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(1, 31, 54);
+  doc.text('AL-NAKHEEL LUXURY PROPERTIES', margin, y);
+  y += 8;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('Muscat, Sultanate of Oman', margin, y);
+  y += 14;
+
+  doc.setDrawColor(230);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 12;
+
+  // Title
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(1, 31, 54);
+  doc.text('Terms of Stay', margin, y);
+  y += 8;
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, margin, y);
+  y += 12;
+
+  doc.setDrawColor(230);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 10;
+
+  // Terms body — wrap text and handle page breaks
+  doc.setFontSize(10);
+  doc.setTextColor(40);
+  doc.setFont('helvetica', 'normal');
+
+  const lines = doc.splitTextToSize(termsText, maxWidth);
+  const lineHeight = 5.5;
+
+  for (const line of lines) {
+    if (y + lineHeight > pageHeight - 25) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.text(line, margin, y);
+    y += lineHeight;
+  }
+
+  // Footer on last page
+  y = pageHeight - 20;
+  doc.setFontSize(7);
+  doc.setTextColor(180);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.', pageWidth / 2, y, { align: 'center' });
+
+  doc.save('Al-Nakheel-Terms-of-Stay.pdf');
+}

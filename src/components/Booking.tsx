@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check, FileText, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check, FileText, X, Download } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
+import { downloadTermsPDF } from '../services/pdf';
 import { sendWhatsAppInvoice } from './Invoices';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -1014,7 +1015,7 @@ export const Booking: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-5 border-t border-primary-navy/5 flex-shrink-0">
+              <div className="p-5 border-t border-primary-navy/5 flex-shrink-0 space-y-2.5">
                 <button
                   onClick={() => {
                     setTermsAccepted(true);
@@ -1025,6 +1026,13 @@ export const Booking: React.FC = () => {
                 >
                   <Check size={16} />
                   I Accept the Terms
+                </button>
+                <button
+                  onClick={() => downloadTermsPDF(termsOfStay)}
+                  className="w-full border-2 border-primary-navy/10 text-primary-navy/60 py-3.5 rounded-[16px] font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:border-primary-navy/20 hover:text-primary-navy"
+                >
+                  <Download size={14} />
+                  Download Terms as PDF
                 </button>
               </div>
             </motion.div>

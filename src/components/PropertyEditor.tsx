@@ -295,16 +295,9 @@ export const PropertyEditor: React.FC = () => {
           ))}
         </div>
 
-        {/* Day Use Rate */}
+        {/* Security Deposit */}
         <div className="pt-4 border-t border-primary-navy/5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
-                <Sun size={12} /> Day Use Rate (OMR)
-              </label>
-              <input type="number" value={form.pricing.day_use_rate} onChange={(e) => setPricing({ day_use_rate: parseInt(e.target.value) || 0 })} className={inputClass} />
-              <p className="text-[10px] text-primary-navy/40 font-medium">Applied when check-in and check-out are on the same date (e.g. 12 PM – 10 PM).</p>
-            </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Security Deposit — Refundable (OMR)</label>
               <input type="number" value={form.pricing.security_deposit} onChange={(e) => setPricing({ security_deposit: parseInt(e.target.value) || 0 })} className={inputClass} />
