@@ -155,13 +155,29 @@ export const Booking: React.FC = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Compute which slots remain bookable for a date, accounting for time overlap
+  const getAvailableSlotsForDate = (dateStr: string): DayUseSlot[] => {
+    const taken = bookedSlots.get(dateStr) || [];
+    if (taken.length === 0) return dayUseSlots;
+    return dayUseSlots.filter(slot => {
+      if (taken.includes(slot.id)) return false;
+      // Check time overlap: if ANY booked slot's hours overlap this slot, block it
+      for (const takenId of taken) {
+        const takenSlot = dayUseSlots.find(s => s.id === takenId);
+        if (takenSlot && slot.start_time < takenSlot.end_time && slot.end_time > takenSlot.start_time) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
+
   const isDayBooked = (day: number): boolean => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     if (bookedDates.has(dateStr)) return true;
-    // If slots exist and ALL are taken for this day, it's fully booked
+    // If slots exist, check whether any slot is still available (overlap-aware)
     if (dayUseSlots.length > 0) {
-      const takenSlots = bookedSlots.get(dateStr) || [];
-      if (takenSlots.length >= dayUseSlots.length) return true;
+      if (getAvailableSlotsForDate(dateStr).length === 0) return true;
     }
     return false;
   };
@@ -204,13 +220,9 @@ export const Booking: React.FC = () => {
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
   const securityDeposit = pricingSettings?.security_deposit ?? property?.security_deposit ?? 50;
 
-  // Available slots for selected day-use date
+  // Available slots for selected day-use date (overlap-aware)
   const availableSlots = isDayUse && selectedDates.start !== null
-    ? dayUseSlots.filter(slot => {
-        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
-        const taken = bookedSlots.get(dateStr) || [];
-        return !taken.includes(slot.id);
-      })
+    ? getAvailableSlotsForDate(`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`)
     : [];
 
   // Dynamic pricing breakdown
