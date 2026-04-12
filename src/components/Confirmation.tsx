@@ -40,8 +40,14 @@ export const Confirmation: React.FC = () => {
   const isThawani = booking.payment_method === 'thawani';
   const isBankTransfer = booking.payment_method === 'bank_transfer';
 
-  const deposit = booking.security_deposit || 0;
-  const stayTotal = booking.total_amount - deposit;
+  const deposit = Number(booking.depositAmount) || Number(booking.security_deposit) || 0;
+  const stayTotal = Number(booking.stayTotal) || (Number(booking.grandTotal || booking.total_amount) - deposit);
+  const grandTotal = Number(booking.grandTotal) || Number(booking.total_amount) || (stayTotal + deposit);
+
+  const isDayUse = booking.check_in === booking.check_out;
+  const stayLabel = isDayUse
+    ? (booking.slot_name ? `${booking.slot_name} — ${propertyName}` : `Day Use — ${propertyName}`)
+    : `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`;
 
   const handleViewInvoice = () => {
     const doc = generateInvoicePDF({
@@ -49,11 +55,11 @@ export const Confirmation: React.FC = () => {
       guest_name: booking.guest_name,
       room_type: propertyName,
       issued_date: booking.created_at,
-      subtotal: booking.total_amount,
+      subtotal: grandTotal,
       vat_amount: 0,
-      total_amount: booking.total_amount,
+      total_amount: grandTotal,
       items: [
-        { description: `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`, amount: stayTotal },
+        { description: stayLabel, amount: stayTotal },
         ...(deposit > 0 ? [{ description: 'Refundable Security Deposit', amount: deposit }] : []),
       ],
     });
@@ -118,7 +124,9 @@ export const Confirmation: React.FC = () => {
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Duration</p>
-              <p className="font-bold text-primary-navy text-sm">{booking.nights} Night{booking.nights > 1 ? 's' : ''}</p>
+              <p className="font-bold text-primary-navy text-sm">
+                {isDayUse ? (booking.slot_name || 'Day Use') : `${booking.nights} Night${booking.nights > 1 ? 's' : ''}`}
+              </p>
             </div>
           </div>
 
@@ -135,7 +143,7 @@ export const Confirmation: React.FC = () => {
             )}
             <div className="flex justify-between text-sm pt-2 border-t border-primary-navy/5">
               <span className="font-bold text-primary-navy">Grand Total</span>
-              <span className="font-bold text-secondary-gold font-headline text-lg">{booking.total_amount} OMR</span>
+              <span className="font-bold text-secondary-gold font-headline text-lg">{grandTotal} OMR</span>
             </div>
           </div>
 

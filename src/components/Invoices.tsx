@@ -19,10 +19,14 @@ interface RealtimeBooking {
   total_amount: number;
   nightly_rate: number;
   security_deposit: number;
+  stayTotal?: number;
+  depositAmount?: number;
+  grandTotal?: number;
   status: string;
   payment_status: string;
   payment_method: string;
   receiptURL: string;
+  slot_name?: string;
   created_at: string;
 }
 
@@ -54,10 +58,15 @@ export const Invoices: React.FC = () => {
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
-    const deposit = b.security_deposit || 0;
-    const stayTotal = b.total_amount - deposit;
+    const deposit = Number(b.depositAmount) || Number(b.security_deposit) || 0;
+    const stayTotal = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
+    const total = Number(b.grandTotal) || Number(b.total_amount) || (stayTotal + deposit);
+    const isDayUse = b.check_in === b.check_out;
+    const stayLabel = isDayUse
+      ? (b.slot_name ? `${b.slot_name} — ${b.property_name}` : `Day Use — ${b.property_name}`)
+      : `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`;
     const items: Invoice['items'] = [
-      { id: 1, invoice_id: b.id, description: `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`, amount: stayTotal },
+      { id: 1, invoice_id: b.id, description: stayLabel, amount: stayTotal },
     ];
     if (deposit > 0) {
       items.push({ id: 2, invoice_id: b.id, description: 'Refundable Security Deposit', amount: deposit });
@@ -67,9 +76,9 @@ export const Invoices: React.FC = () => {
       guest_name: b.guest_name,
       booking_ref: b.id.slice(0, 8).toUpperCase(),
       room_type: b.property_name,
-      subtotal: b.total_amount,
+      subtotal: total,
       vat_amount: 0,
-      total_amount: b.total_amount,
+      total_amount: total,
       status: b.status === 'confirmed' ? 'paid' : 'pending',
       vat_compliant: false,
       issued_date: b.created_at,
@@ -108,7 +117,7 @@ export const Invoices: React.FC = () => {
 
   const handleDownloadVAT = (month: number, year: number, label: string) => {
     const monthBookings = getMonthlyConfirmedBookings(month, year);
-    const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0);
+    const totalRevenue = monthBookings.reduce((sum, b) => sum + (Number(b.stayTotal) || (Number(b.total_amount) - (Number(b.depositAmount) || Number(b.security_deposit) || 0))), 0);
     const vatCollected = +(totalRevenue * 0.05).toFixed(2);
 
     generateVATReportPDF({
@@ -122,7 +131,7 @@ export const Invoices: React.FC = () => {
         guest_name: b.guest_name,
         check_in: b.check_in,
         nights: b.nights,
-        amount: b.total_amount - (b.security_deposit || 0),
+        amount: Number(b.stayTotal) || (Number(b.total_amount) - (Number(b.depositAmount) || Number(b.security_deposit) || 0)),
       })),
     });
   };
@@ -134,13 +143,14 @@ export const Invoices: React.FC = () => {
 
   const handleSendWhatsApp = (b: RealtimeBooking) => {
     const phone = formatPhone(b.guest_phone);
-    const deposit = b.security_deposit || 0;
-    const stayAmount = b.total_amount - deposit;
+    const deposit = Number(b.depositAmount) || Number(b.security_deposit) || 0;
+    const stayAmount = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
+    const total = Number(b.grandTotal) || Number(b.total_amount) || (stayAmount + deposit);
     const receiptLink = b.receiptURL || '';
     const message = encodeURIComponent(
       `Assalamu Alaikum ${b.guest_name},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nStay: ${stayAmount.toFixed(2)} OMR`
       + (deposit > 0 ? `\nRefundable Deposit: ${deposit.toFixed(2)} OMR` : '')
-      + `\nTotal: ${b.total_amount.toFixed(2)} OMR`
+      + `\nTotal: ${total.toFixed(2)} OMR`
       + (receiptLink ? `\n\nReceipt: ${receiptLink}` : '')
       + `\n\nThank you for choosing Al-Nakheel.`
     );
@@ -229,7 +239,7 @@ export const Invoices: React.FC = () => {
                   {/* Amount — bold, right-aligned */}
                   <div className="col-span-2 text-right">
                     <span className="font-bold text-primary-navy font-headline text-sm">
-                      {b.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {(Number(b.grandTotal) || Number(b.total_amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
                     <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
                   </div>
@@ -268,7 +278,7 @@ export const Invoices: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {lastSixMonths.map((m, i) => {
             const monthBookings = getMonthlyConfirmedBookings(m.month, m.year);
-            const totalRevenue = monthBookings.reduce((sum, b) => sum + b.total_amount - (b.security_deposit || 0), 0);
+            const totalRevenue = monthBookings.reduce((sum, b) => sum + (Number(b.stayTotal) || (Number(b.total_amount) - (Number(b.depositAmount) || Number(b.security_deposit) || 0))), 0);
             const vatCollected = +(totalRevenue * 0.05).toFixed(2);
 
             return (

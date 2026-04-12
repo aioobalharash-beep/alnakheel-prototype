@@ -184,11 +184,18 @@ export interface FirestoreBooking {
   nightly_rate: number;
   security_deposit: number;
   total_amount: number;
+  stayTotal?: number;
+  depositAmount?: number;
+  grandTotal?: number;
   status: string;
   payment_status: string;
   payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
   receipt_image?: string;
   receiptURL?: string;
+  slot_id?: string;
+  slot_name?: string;
+  slot_start_time?: string;
+  slot_end_time?: string;
   created_at: string;
 }
 
@@ -203,14 +210,25 @@ export const firestoreBookings = {
     check_out: string;
     nightly_rate: number;
     security_deposit: number;
+    stayTotal?: number;
+    depositAmount?: number;
+    grandTotal?: number;
     payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
     receipt_image?: string;
     receiptURL?: string;
+    slot_id?: string;
+    slot_name?: string;
+    slot_start_time?: string;
+    slot_end_time?: string;
   }): Promise<FirestoreBooking> {
     const checkIn = new Date(data.check_in);
     const checkOut = new Date(data.check_out);
     const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-    const total = (data.nightly_rate * nights) + data.security_deposit;
+
+    // Use explicit pricing values from the pricing engine when available
+    const stayTotal = Number(data.stayTotal) || (data.nightly_rate * nights);
+    const depositAmount = Number(data.depositAmount) || Number(data.security_deposit) || 0;
+    const grandTotal = Number(data.grandTotal) || (stayTotal + depositAmount);
 
     const isBankTransfer = data.payment_method === 'bank_transfer';
     const isWalkIn = data.payment_method === 'walk_in';
@@ -225,13 +243,22 @@ export const firestoreBookings = {
       check_out: data.check_out,
       nights,
       nightly_rate: data.nightly_rate,
-      security_deposit: data.security_deposit,
-      total_amount: total,
+      security_deposit: depositAmount,
+      total_amount: grandTotal,
+      stayTotal,
+      depositAmount,
+      grandTotal,
       status: isBankTransfer ? 'pending' : 'confirmed',
       payment_status: isBankTransfer ? 'pending' : (isWalkIn ? 'pending' : 'paid'),
       payment_method: data.payment_method,
       receipt_image: data.receipt_image || '',
       receiptURL: data.receiptURL || '',
+      ...(data.slot_id ? {
+        slot_id: data.slot_id,
+        slot_name: data.slot_name || '',
+        slot_start_time: data.slot_start_time || '',
+        slot_end_time: data.slot_end_time || '',
+      } : {}),
       created_at: new Date().toISOString(),
     };
 
@@ -267,7 +294,7 @@ export const firestoreBookings = {
     await addDoc(notificationsCol(), {
       type: isBankTransfer ? 'pending_payment' : 'new_booking',
       title: isBankTransfer ? 'Bank Transfer Pending' : 'New Booking',
-      message: `${data.guest_name} booked ${data.property_name} (${nights} nights)`,
+      message: `${data.guest_name} booked ${data.property_name} (${nights > 0 ? `${nights} nights` : 'Day Use'})`,
       booking_id: docRef.id,
       read: false,
       created_at: new Date().toISOString(),

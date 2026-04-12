@@ -331,6 +331,10 @@ export const Booking: React.FC = () => {
         receiptURL = await uploadToCloudinary(receiptFile);
       }
 
+      const computedStayTotal = priceBreakdown ? Number(priceBreakdown.total) : Number(property.nightly_rate) * nights;
+      const computedDeposit = Number(securityDeposit) || 0;
+      const computedGrandTotal = computedStayTotal + computedDeposit;
+
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -340,7 +344,10 @@ export const Booking: React.FC = () => {
         check_in: checkIn,
         check_out: checkOut,
         nightly_rate: priceBreakdown ? (isDayUse ? priceBreakdown.total : Math.round(priceBreakdown.total / nights)) : property.nightly_rate,
-        security_deposit: securityDeposit,
+        security_deposit: computedDeposit,
+        stayTotal: computedStayTotal,
+        depositAmount: computedDeposit,
+        grandTotal: computedGrandTotal,
         payment_method: paymentMethod,
         receiptURL,
         ...(selectedSlot ? {
