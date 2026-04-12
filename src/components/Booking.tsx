@@ -220,7 +220,9 @@ export const Booking: React.FC = () => {
     return calculateTotalPrice(checkInStr, checkOutStr, pricing, selectedSlot?.id);
   })();
 
-  const total = (priceBreakdown?.total || 0) + securityDeposit;
+  const stayTotal = priceBreakdown?.total || 0;
+  const depositAmount = Number(securityDeposit) || 0;
+  const grandTotal = stayTotal + depositAmount;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -328,13 +330,109 @@ export const Booking: React.FC = () => {
       // Upload receipt to Cloudinary if bank transfer
       let receiptURL: string | undefined;
       if (paymentMethod === 'bank_transfer' && receiptFile) {
-        receiptURL = await uploadToCloudinary(receiptFile);
+        try {
+          receiptURL = await uploadToCloudinary(receiptFile);
+        } catch (uploadErr: any) {
+          console.error('Receipt upload failed:', uploadErr.message);
+          setSubmitError(`Receipt upload failed: ${uploadErr.message}. Please try again.`);
+          setSubmitting(false);
+          return;
+        }
       }
 
-      const computedStayTotal = priceBreakdown ? Number(priceBreakdown.total) : Number(property.nightly_rate) * nights;
-      const computedDeposit = Number(securityDeposit) || 0;
-      const computedGrandTotal = computedStayTotal + computedDeposit;
+      // Thawani checkout — redirect to payment gateway
+      if (paymentMethod === 'thawani') {
+        const thawaniSecretKey = import.meta.env.VITE_THAWANI_SECRET_KEY;
+        const thawaniPublishableKey = import.meta.env.VITE_THAWANI_PUBLISHABLE_KEY;
+        const thawaniMode = import.meta.env.VITE_THAWANI_MODE || 'test';
+        const baseUrl = thawaniMode === 'live'
+          ? 'https://checkout.thawani.om'
+          : 'https://uatcheckout.thawani.om';
 
+        if (thawaniSecretKey && thawaniPublishableKey) {
+          // Convert OMR to baizas (1 OMR = 1000 baizas) — Thawani expects integer baizas
+          const amountInBaizas = Math.round(grandTotal * 1000);
+
+          const sessionRes = await fetch(`${baseUrl}/api/v1/checkout/session`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'thawani-api-key': thawaniSecretKey,
+            },
+            body: JSON.stringify({
+              client_reference_id: `${guestName.trim()}-${Date.now()}`,
+              mode: 'payment',
+              products: [
+                {
+                  name: isDayUse
+                    ? `Day Use — ${property.name}${selectedSlot ? ` (${selectedSlot.name})` : ''}`
+                    : `${nights} Night${nights > 1 ? 's' : ''} — ${property.name}`,
+                  quantity: 1,
+                  unit_amount: amountInBaizas,
+                },
+              ],
+              success_url: `${window.location.origin}/confirmation?session_id={session_id}`,
+              cancel_url: `${window.location.origin}/booking`,
+              metadata: {
+                property_id: property.id,
+                property_name: property.name,
+                guest_name: guestName.trim(),
+                guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+                check_in: checkIn,
+                check_out: checkOut,
+                stayTotal: String(stayTotal),
+                depositAmount: String(depositAmount),
+                grandTotal: String(grandTotal),
+              },
+            }),
+          });
+
+          if (!sessionRes.ok) {
+            const errData = await sessionRes.json().catch(() => ({}));
+            console.error('Thawani session error:', errData);
+            throw new Error(errData.description || errData.message || 'Failed to create payment session');
+          }
+
+          const sessionData = await sessionRes.json();
+          const sessionId = sessionData.data?.session_id;
+
+          if (!sessionId) {
+            throw new Error('No session ID returned from Thawani');
+          }
+
+          // Save booking as pending-payment before redirecting
+          await bookingsApi.create({
+            property_id: property.id,
+            property_name: property.name,
+            guest_name: guestName.trim(),
+            guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+            guest_email: guestEmail || undefined,
+            check_in: checkIn,
+            check_out: checkOut,
+            nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
+            security_deposit: depositAmount,
+            stayTotal,
+            depositAmount,
+            grandTotal,
+            payment_method: 'thawani',
+            ...(selectedSlot ? {
+              slot_id: selectedSlot.id,
+              slot_name: selectedSlot.name,
+              slot_start_time: selectedSlot.start_time,
+              slot_end_time: selectedSlot.end_time,
+            } : {}),
+          });
+
+          // Redirect to Thawani checkout
+          window.location.href = `${baseUrl}/pay/${sessionId}?key=${thawaniPublishableKey}`;
+          return;
+        }
+
+        // Fallback: no Thawani keys configured — create booking directly
+        console.warn('Thawani keys not configured, creating booking directly');
+      }
+
+      // Bank transfer or Thawani fallback — save booking to Firestore
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -343,11 +441,11 @@ export const Booking: React.FC = () => {
         guest_email: guestEmail || undefined,
         check_in: checkIn,
         check_out: checkOut,
-        nightly_rate: priceBreakdown ? (isDayUse ? priceBreakdown.total : Math.round(priceBreakdown.total / nights)) : property.nightly_rate,
-        security_deposit: computedDeposit,
-        stayTotal: computedStayTotal,
-        depositAmount: computedDeposit,
-        grandTotal: computedGrandTotal,
+        nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
+        security_deposit: depositAmount,
+        stayTotal,
+        depositAmount,
+        grandTotal,
         payment_method: paymentMethod,
         receiptURL,
         ...(selectedSlot ? {
@@ -372,7 +470,7 @@ export const Booking: React.FC = () => {
         },
       });
     } catch (err: any) {
-      console.error('Cloudinary Error Details:', err.response?.data || err.message);
+      console.error('Booking submission error:', err.response?.data || err.message || err);
       setSubmitError(err.message || 'Booking failed. Please try again.');
     } finally {
       setSubmitting(false);
@@ -614,11 +712,11 @@ export const Booking: React.FC = () => {
           <div className="pt-3 border-t border-primary-navy/5 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-primary-navy/60 font-medium">Stay Total</span>
-              <span className="font-bold text-primary-navy">{priceBreakdown.total} OMR</span>
+              <span className="font-bold text-primary-navy">{stayTotal} OMR</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-primary-navy/60 font-medium">Refundable Deposit</span>
-              <span className="font-bold text-primary-navy">{securityDeposit} OMR</span>
+              <span className="font-bold text-primary-navy">{depositAmount} OMR</span>
             </div>
           </div>
 
@@ -628,7 +726,7 @@ export const Booking: React.FC = () => {
               <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">Deposit refunded after checkout</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-secondary-gold font-headline">{total} OMR</p>
+              <p className="text-2xl font-bold text-secondary-gold font-headline">{grandTotal} OMR</p>
             </div>
           </div>
         </motion.section>
