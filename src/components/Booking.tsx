@@ -53,6 +53,9 @@ export const Booking: React.FC = () => {
   const [selectedSlot, setSelectedSlot] = useState<DayUseSlot | null>(null);
   const [bookedSlots, setBookedSlots] = useState<Map<string, string[]>>(new Map());
 
+  // Thawani simulation state
+  const [thawaniSimulating, setThawaniSimulating] = useState(false);
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -340,99 +343,54 @@ export const Booking: React.FC = () => {
         }
       }
 
-      // Thawani checkout — redirect to payment gateway
+      // Thawani — simulate payment gateway for prototype demo
       if (paymentMethod === 'thawani') {
-        const thawaniSecretKey = import.meta.env.VITE_THAWANI_SECRET_KEY;
-        const thawaniPublishableKey = import.meta.env.VITE_THAWANI_PUBLISHABLE_KEY;
-        const thawaniMode = import.meta.env.VITE_THAWANI_MODE || 'test';
-        const baseUrl = thawaniMode === 'live'
-          ? 'https://checkout.thawani.om'
-          : 'https://uatcheckout.thawani.om';
+        setThawaniSimulating(true);
 
-        if (thawaniSecretKey && thawaniPublishableKey) {
-          // Convert OMR to baizas (1 OMR = 1000 baizas) — Thawani expects integer baizas
-          const amountInBaizas = Math.round(grandTotal * 1000);
+        // Simulate 2-second network delay (Thawani redirect)
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-          const sessionRes = await fetch(`${baseUrl}/api/v1/checkout/session`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'thawani-api-key': thawaniSecretKey,
-            },
-            body: JSON.stringify({
-              client_reference_id: `${guestName.trim()}-${Date.now()}`,
-              mode: 'payment',
-              products: [
-                {
-                  name: isDayUse
-                    ? `Day Use — ${property.name}${selectedSlot ? ` (${selectedSlot.name})` : ''}`
-                    : `${nights} Night${nights > 1 ? 's' : ''} — ${property.name}`,
-                  quantity: 1,
-                  unit_amount: amountInBaizas,
-                },
-              ],
-              success_url: `${window.location.origin}/confirmation?session_id={session_id}`,
-              cancel_url: `${window.location.origin}/booking`,
-              metadata: {
-                property_id: property.id,
-                property_name: property.name,
-                guest_name: guestName.trim(),
-                guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
-                check_in: checkIn,
-                check_out: checkOut,
-                stayTotal: String(stayTotal),
-                depositAmount: String(depositAmount),
-                grandTotal: String(grandTotal),
-              },
-            }),
-          });
+        // Save booking to Firestore as paid
+        const result = await bookingsApi.create({
+          property_id: property.id,
+          property_name: property.name,
+          guest_name: guestName.trim(),
+          guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+          guest_email: guestEmail || undefined,
+          check_in: checkIn,
+          check_out: checkOut,
+          nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
+          security_deposit: depositAmount,
+          stayTotal,
+          depositAmount,
+          grandTotal,
+          payment_method: 'thawani',
+          ...(selectedSlot ? {
+            slot_id: selectedSlot.id,
+            slot_name: selectedSlot.name,
+            slot_start_time: selectedSlot.start_time,
+            slot_end_time: selectedSlot.end_time,
+          } : {}),
+        });
 
-          if (!sessionRes.ok) {
-            const errData = await sessionRes.json().catch(() => ({}));
-            console.error('Thawani session error:', errData);
-            throw new Error(errData.description || errData.message || 'Failed to create payment session');
-          }
+        setThawaniSimulating(false);
 
-          const sessionData = await sessionRes.json();
-          const sessionId = sessionData.data?.session_id;
+        sendWhatsAppInvoice({
+          guest_name: guestName.trim(),
+          guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
+          id: result.booking.id,
+        });
 
-          if (!sessionId) {
-            throw new Error('No session ID returned from Thawani');
-          }
-
-          // Save booking as pending-payment before redirecting
-          await bookingsApi.create({
-            property_id: property.id,
-            property_name: property.name,
-            guest_name: guestName.trim(),
-            guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
-            guest_email: guestEmail || undefined,
-            check_in: checkIn,
-            check_out: checkOut,
-            nightly_rate: priceBreakdown ? (isDayUse ? stayTotal : Math.round(stayTotal / nights)) : property.nightly_rate,
-            security_deposit: depositAmount,
-            stayTotal,
-            depositAmount,
-            grandTotal,
-            payment_method: 'thawani',
-            ...(selectedSlot ? {
-              slot_id: selectedSlot.id,
-              slot_name: selectedSlot.name,
-              slot_start_time: selectedSlot.start_time,
-              slot_end_time: selectedSlot.end_time,
-            } : {}),
-          });
-
-          // Redirect to Thawani checkout
-          window.location.href = `${baseUrl}/pay/${sessionId}?key=${thawaniPublishableKey}`;
-          return;
-        }
-
-        // Fallback: no Thawani keys configured — create booking directly
-        console.warn('Thawani keys not configured, creating booking directly');
+        navigate('/confirmation', {
+          state: {
+            booking: result.booking,
+            propertyName: result.property_name,
+          },
+        });
+        return;
       }
 
-      // Bank transfer or Thawani fallback — save booking to Firestore
+      // Bank transfer — save booking to Firestore
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -473,6 +431,7 @@ export const Booking: React.FC = () => {
       console.error('Booking submission error:', err.response?.data || err.message || err);
       setSubmitError(err.message || 'Booking failed. Please try again.');
     } finally {
+      setThawaniSimulating(false);
       setSubmitting(false);
     }
   };
@@ -915,10 +874,18 @@ export const Booking: React.FC = () => {
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (
-            uploadProgress !== null ? (
+            thawaniSimulating ? (
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="text-xs normal-case tracking-normal font-medium">Redirecting to Thawani Secure Payment...</span>
+              </div>
+            ) : uploadProgress !== null ? (
               <span className="text-xs">Uploading Receipt...</span>
             ) : (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="text-xs normal-case tracking-normal font-medium">Processing...</span>
+              </div>
             )
           ) : paymentMethod === 'bank_transfer' ? (
             <>
@@ -927,8 +894,8 @@ export const Booking: React.FC = () => {
             </>
           ) : (
             <>
-              Proceed to Secure Payment
-              <span className="text-[10px] opacity-40 lowercase font-normal">(via Thawani)</span>
+              Pay with Thawani
+              <span className="text-[10px] opacity-40 lowercase font-normal">({grandTotal} OMR)</span>
             </>
           )}
         </button>
