@@ -1,3 +1,17 @@
+export interface DayUseSlot {
+  id: string;
+  name: string;
+  start_time: string;  // HH:MM
+  end_time: string;    // HH:MM
+  sunday_rate: number;
+  monday_rate: number;
+  tuesday_rate: number;
+  wednesday_rate: number;
+  thursday_rate: number;
+  friday_rate: number;
+  saturday_rate: number;
+}
+
 export interface PricingSettings {
   sunday_rate: number;
   monday_rate: number;
@@ -16,6 +30,7 @@ export interface PricingSettings {
     start_date: string;
     end_date: string;
   };
+  day_use_slots?: DayUseSlot[];
   // Legacy compat — ignored if individual days are set
   weekday_rate?: number;
 }
@@ -27,9 +42,33 @@ export interface PriceBreakdown {
   discount_amount: number;
   total: number;
   per_night: { date: string; dayLabel: string; rate: number; isSpecial: boolean }[];
+  slotName?: string;
+  slotTime?: string;
 }
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Format 24h time string to readable format (e.g. "14:00" → "2 PM") */
+export function formatTime(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+/** Get the slot rate for a given day-of-week */
+export function getSlotRateForDay(dow: number, slot: DayUseSlot): number {
+  switch (dow) {
+    case 0: return slot.sunday_rate;
+    case 1: return slot.monday_rate;
+    case 2: return slot.tuesday_rate;
+    case 3: return slot.wednesday_rate;
+    case 4: return slot.thursday_rate;
+    case 5: return slot.friday_rate;
+    case 6: return slot.saturday_rate;
+    default: return slot.sunday_rate;
+  }
+}
 
 /** Get the nightly rate for a given day-of-week (0=Sun … 6=Sat) */
 function getRateForDay(dow: number, pricing: PricingSettings): number {
@@ -57,7 +96,8 @@ export function getAllRates(pricing: PricingSettings): number[] {
 export function calculateTotalPrice(
   checkIn: string,
   checkOut: string,
-  pricing: PricingSettings
+  pricing: PricingSettings,
+  slotId?: string
 ): PriceBreakdown {
   const start = new Date(checkIn);
   const end = new Date(checkOut);
@@ -69,11 +109,44 @@ export function calculateTotalPrice(
     const dateStr = start.toISOString().split('T')[0];
     const dow = start.getDay();
     const dayLabel = DAY_LABELS[dow];
+
+    // Slot-based pricing
+    if (slotId && pricing.day_use_slots?.length) {
+      const slot = pricing.day_use_slots.find(s => s.id === slotId);
+      if (slot) {
+        let rate = getSlotRateForDay(dow, slot);
+        const isSpecial = specialMap.has(dateStr);
+        if (isSpecial) rate = specialMap.get(dateStr)!;
+
+        let discountAmount = 0;
+        if (pricing.discount?.enabled && pricing.discount.start_date && pricing.discount.end_date) {
+          if (dateStr >= pricing.discount.start_date && dateStr <= pricing.discount.end_date) {
+            if (pricing.discount.type === 'percent') {
+              discountAmount = Math.round(rate * (pricing.discount.value / 100) * 100) / 100;
+            } else {
+              discountAmount = pricing.discount.value;
+            }
+          }
+        }
+
+        return {
+          nights: 0,
+          isDayUse: true,
+          subtotal: rate,
+          discount_amount: discountAmount,
+          total: Math.max(0, rate - discountAmount),
+          per_night: [{ date: dateStr, dayLabel, rate, isSpecial }],
+          slotName: slot.name,
+          slotTime: `${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`,
+        };
+      }
+    }
+
+    // Fallback: flat day_use_rate
     let rate = pricing.day_use_rate || 0;
     const isSpecial = specialMap.has(dateStr);
     if (isSpecial) rate = specialMap.get(dateStr)!;
 
-    // Apply discount
     let discountAmount = 0;
     if (pricing.discount?.enabled && pricing.discount.start_date && pricing.discount.end_date) {
       if (dateStr >= pricing.discount.start_date && dateStr <= pricing.discount.end_date) {
@@ -147,7 +220,7 @@ export function calculateTotalPrice(
 
 /** Build a human-readable breakdown string */
 export function formatBreakdown(b: PriceBreakdown): string {
-  if (b.isDayUse) return 'Day Use';
+  if (b.isDayUse) return b.slotName ? `${b.slotName} Slot` : 'Day Use';
   return `${b.nights} Night${b.nights > 1 ? 's' : ''}`;
 }
 
@@ -169,6 +242,7 @@ export function migratePricing(raw: any): PricingSettings {
     day_use_rate: raw.day_use_rate || Math.round(weekday * 0.6),
     security_deposit: raw.security_deposit || 50,
     special_dates: raw.special_dates || [],
+    day_use_slots: raw.day_use_slots || [],
     discount: raw.discount,
   };
 }

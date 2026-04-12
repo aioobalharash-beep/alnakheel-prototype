@@ -7,7 +7,7 @@ import { propertiesApi, bookingsApi } from '../services/api';
 import { sendWhatsAppInvoice } from './Invoices';
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { calculateTotalPrice, formatBreakdown, migratePricing, type PricingSettings, type PriceBreakdown } from '../services/pricingUtils';
+import { calculateTotalPrice, formatBreakdown, migratePricing, formatTime, getSlotRateForDay, type PricingSettings, type PriceBreakdown, type DayUseSlot } from '../services/pricingUtils';
 import type { Property } from '../types';
 
 export const Booking: React.FC = () => {
@@ -48,6 +48,11 @@ export const Booking: React.FC = () => {
   // Dynamic bank details from Firestore
   const [bankDetails, setBankDetails] = useState({ bank_name: 'Bank Muscat', account_name: 'Al-Nakheel Luxury Properties LLC', iban: 'OM12 0123 0000 0012 3456 789', bankPhone: '' });
 
+  // Day-use slots
+  const [dayUseSlots, setDayUseSlots] = useState<DayUseSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<DayUseSlot | null>(null);
+  const [bookedSlots, setBookedSlots] = useState<Map<string, string[]>>(new Map());
+
   useEffect(() => {
     propertiesApi.list()
       .then(properties => {
@@ -62,19 +67,32 @@ export const Booking: React.FC = () => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const dates = new Set<string>();
+      const slotMap = new Map<string, string[]>();
+
       snapshot.docs.forEach(d => {
         const data = d.data();
         if (data.status === 'cancelled') return;
 
-        const checkIn = new Date(data.check_in);
-        const checkOut = new Date(data.check_out);
-        const cursor = new Date(checkIn);
-        while (cursor <= checkOut) {
-          dates.add(cursor.toISOString().split('T')[0]);
-          cursor.setDate(cursor.getDate() + 1);
+        const bIsDayUse = data.check_in === data.check_out;
+
+        if (bIsDayUse && data.slot_id) {
+          // Slot-based day-use: only block that slot, not the whole day
+          const existing = slotMap.get(data.check_in) || [];
+          existing.push(data.slot_id);
+          slotMap.set(data.check_in, existing);
+        } else {
+          // Overnight or non-slot day-use: block entire days
+          const checkIn = new Date(data.check_in);
+          const checkOut = new Date(data.check_out);
+          const cursor = new Date(checkIn);
+          while (cursor <= checkOut) {
+            dates.add(cursor.toISOString().split('T')[0]);
+            cursor.setDate(cursor.getDate() + 1);
+          }
         }
       });
       setBookedDates(dates);
+      setBookedSlots(slotMap);
     });
     return () => unsubscribe();
   }, []);
@@ -96,7 +114,11 @@ export const Booking: React.FC = () => {
       .then(snap => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.pricing) setPricingSettings(migratePricing(data.pricing));
+          if (data.pricing) {
+            const migrated = migratePricing(data.pricing);
+            setPricingSettings(migrated);
+            if (migrated.day_use_slots?.length) setDayUseSlots(migrated.day_use_slots);
+          }
           if (data.bank_name || data.account_name || data.iban) {
             setBankDetails(prev => ({
               bank_name: data.bank_name || prev.bank_name,
@@ -122,13 +144,20 @@ export const Booking: React.FC = () => {
 
   const isDayBooked = (day: number): boolean => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return bookedDates.has(dateStr);
+    if (bookedDates.has(dateStr)) return true;
+    // If slots exist and ALL are taken for this day, it's fully booked
+    if (dayUseSlots.length > 0) {
+      const takenSlots = bookedSlots.get(dateStr) || [];
+      if (takenSlots.length >= dayUseSlots.length) return true;
+    }
+    return false;
   };
 
   const handleDayClick = (day: number) => {
     const clickedDate = new Date(currentYear, currentMonth, day);
     if (clickedDate < today) return;
     if (isDayBooked(day)) return;
+    setSelectedSlot(null);
 
     if (!selectedDates.start || (selectedDates.start && selectedDates.end)) {
       setSelectedDates({ start: day, end: null });
@@ -162,10 +191,21 @@ export const Booking: React.FC = () => {
   const nights = selectedDates.start && selectedDates.end ? selectedDates.end - selectedDates.start : 0;
   const securityDeposit = pricingSettings?.security_deposit ?? property?.security_deposit ?? 50;
 
+  // Available slots for selected day-use date
+  const availableSlots = isDayUse && selectedDates.start !== null
+    ? dayUseSlots.filter(slot => {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
+        const taken = bookedSlots.get(dateStr) || [];
+        return !taken.includes(slot.id);
+      })
+    : [];
+
   // Dynamic pricing breakdown
   const priceBreakdown: PriceBreakdown | null = (() => {
     if (selectedDates.start === null || selectedDates.end === null) return null;
     if (!isDayUse && !nights) return null;
+    // Wait for slot selection when slots are defined
+    if (isDayUse && dayUseSlots.length > 0 && !selectedSlot) return null;
     const checkInStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.start).padStart(2, '0')}`;
     const checkOutStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDates.end).padStart(2, '0')}`;
     const fallbackRate = property?.nightly_rate || 120;
@@ -177,7 +217,7 @@ export const Booking: React.FC = () => {
       day_use_rate: Math.round(fallbackRate * 0.6),
       special_dates: [],
     });
-    return calculateTotalPrice(checkInStr, checkOutStr, pricing);
+    return calculateTotalPrice(checkInStr, checkOutStr, pricing, selectedSlot?.id);
   })();
 
   const total = (priceBreakdown?.total || 0) + securityDeposit;
@@ -202,6 +242,10 @@ export const Booking: React.FC = () => {
 
     if (!selectedDates.start || !selectedDates.end) {
       newErrors.dates = 'Please select check-in and check-out dates';
+    }
+
+    if (isDayUse && dayUseSlots.length > 0 && !selectedSlot) {
+      newErrors.slot = 'Please select a time slot';
     }
 
     if (paymentMethod === 'bank_transfer' && !receiptFile) {
@@ -299,6 +343,12 @@ export const Booking: React.FC = () => {
         security_deposit: securityDeposit,
         payment_method: paymentMethod,
         receiptURL,
+        ...(selectedSlot ? {
+          slot_id: selectedSlot.id,
+          slot_name: selectedSlot.name,
+          slot_start_time: selectedSlot.start_time,
+          slot_end_time: selectedSlot.end_time,
+        } : {}),
       });
 
       // Trigger WhatsApp invoice (will connect API next)
@@ -459,12 +509,63 @@ export const Booking: React.FC = () => {
           <div className="mt-4 text-xs text-primary-navy/60 text-center">
             {selectedDates.end !== null
               ? isDayUse
-                ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
+                ? selectedSlot
+                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
+                  : dayUseSlots.length > 0
+                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use — select a time slot below)`
+                    : `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
                 : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
               : `Tap again for Day Use, or select check-out date`}
           </div>
         )}
       </motion.div>
+
+      {/* Day-Use Time Slot Selection */}
+      {isDayUse && dayUseSlots.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Select Time Slot *</label>
+          <div className="space-y-2">
+            {availableSlots.map(slot => {
+              const dow = new Date(currentYear, currentMonth, selectedDates.start!).getDay();
+              const rate = getSlotRateForDay(dow, slot);
+              const isSelected = selectedSlot?.id === slot.id;
+              return (
+                <button
+                  key={slot.id}
+                  onClick={() => { setSelectedSlot(isSelected ? null : slot); setErrors(prev => ({ ...prev, slot: '' })); }}
+                  className={cn(
+                    "w-full p-4 rounded-[16px] border-2 transition-all text-left flex items-center justify-between",
+                    isSelected
+                      ? "border-primary-navy bg-primary-navy/5"
+                      : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
+                  )}
+                >
+                  <div>
+                    <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-secondary-gold font-headline">{rate} OMR</span>
+                    {isSelected && (
+                      <div className="w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+            {availableSlots.length === 0 && (
+              <p className="text-center text-sm text-primary-navy/40 py-4">All time slots are booked for this date</p>
+            )}
+          </div>
+          {errors.slot && <p className="text-red-500 text-xs font-medium">{errors.slot}</p>}
+        </motion.section>
+      )}
 
       {/* Pricing Summary */}
       {priceBreakdown && (isDayUse || nights > 0) && (
@@ -474,7 +575,12 @@ export const Booking: React.FC = () => {
           className="bg-surface-container-low p-6 rounded-[24px] space-y-4"
         >
           <div className="flex justify-between text-sm">
-            <span className="text-primary-navy/60 font-medium">{isDayUse ? 'Day Use' : 'Stay'}</span>
+            <div>
+              <span className="text-primary-navy/60 font-medium">{isDayUse ? 'Day Use' : 'Stay'}</span>
+              {priceBreakdown.slotTime && (
+                <p className="text-[10px] text-primary-navy/40 font-medium">{priceBreakdown.slotTime}</p>
+              )}
+            </div>
             <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
           </div>
 

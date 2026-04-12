@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { formatTime } from '../services/pricingUtils';
 
 interface DashboardData {
   revenue: { total: number; trend: number };
@@ -28,6 +29,9 @@ interface RealtimeBooking {
   total_amount: number;
   status: string;
   payment_status: string;
+  slot_name?: string;
+  slot_start_time?: string;
+  slot_end_time?: string;
 }
 
 export const Dashboard: React.FC = () => {
@@ -359,7 +363,9 @@ export const Dashboard: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-primary-navy truncate">{b.guest_name}</p>
                     <p className="text-[10px] text-primary-navy/50 font-medium">
-                      {b.property_name} &bull; {b.check_in === b.check_out ? 'Day Use' : `${b.nights} night${b.nights > 1 ? 's' : ''}`} &bull; {b.total_amount} OMR
+                      {b.property_name} &bull; {b.slot_name
+                        ? `${b.slot_name}: ${formatTime(b.slot_start_time!)} – ${formatTime(b.slot_end_time!)}`
+                        : b.check_in === b.check_out ? 'Day Use' : `${b.nights} night${b.nights > 1 ? 's' : ''}`} &bull; {b.total_amount} OMR
                     </p>
                   </div>
                   <span className={cn(
@@ -428,6 +434,7 @@ export const Dashboard: React.FC = () => {
                       <p className="text-[11px] text-primary-navy/50 font-medium">
                         {arrivalDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                         {' '}&bull;{' '}{nextCheckIn.property_name}
+                        {nextCheckIn.slot_name && ` &bull; ${nextCheckIn.slot_name}: ${formatTime(nextCheckIn.slot_start_time!)} – ${formatTime(nextCheckIn.slot_end_time!)}`}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -491,7 +498,9 @@ export const Dashboard: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-white text-sm truncate">New Booking from {recentBooking.guest_name}</p>
                       <p className="text-[11px] text-white/50 font-medium">
-                        {recentBooking.property_name} &bull; {recentBooking.check_in === recentBooking.check_out ? 'Day Use' : `${recentBooking.nights} night${recentBooking.nights > 1 ? 's' : ''}`}
+                        {recentBooking.property_name} &bull; {recentBooking.slot_name
+                          ? `${recentBooking.slot_name}: ${formatTime(recentBooking.slot_start_time!)} – ${formatTime(recentBooking.slot_end_time!)}`
+                          : recentBooking.check_in === recentBooking.check_out ? 'Day Use' : `${recentBooking.nights} night${recentBooking.nights > 1 ? 's' : ''}`}
                       </p>
                     </div>
                   </div>

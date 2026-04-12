@@ -6,6 +6,7 @@ import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { formatTime } from '../services/pricingUtils';
 import type { Transaction } from '../types';
 
 interface RealtimeBooking {
@@ -21,6 +22,9 @@ interface RealtimeBooking {
   status: string;
   payment_status: string;
   created_at: string;
+  slot_name?: string;
+  slot_start_time?: string;
+  slot_end_time?: string;
 }
 
 export const Calendar: React.FC = () => {
@@ -256,7 +260,11 @@ export const Calendar: React.FC = () => {
                 <div>
                   <p className="font-bold text-sm text-primary-navy">{arrival.guest_name}</p>
                   <p className="text-xs text-primary-navy/40 font-medium">
-                    {arrival.property_name} &bull; {new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - {new Date(arrival.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
+                    {arrival.property_name} &bull; {arrival.slot_name
+                      ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!)} – ${formatTime(arrival.slot_end_time!)}`
+                      : arrival.check_in === arrival.check_out
+                        ? 'Day Use'
+                        : `${new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - ${new Date(arrival.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}`}
                   </p>
                 </div>
               </div>

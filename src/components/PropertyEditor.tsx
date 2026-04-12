@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { migratePricing, type PricingSettings } from '../services/pricingUtils';
+import { migratePricing, formatTime, type PricingSettings, type DayUseSlot } from '../services/pricingUtils';
 
 interface GalleryImage { url: string; label: string; }
 
@@ -36,6 +36,7 @@ const DEFAULT_PRICING: PricingSettings = {
   day_use_rate: 70,
   security_deposit: 50,
   special_dates: [],
+  day_use_slots: [],
   discount: { enabled: false, type: 'percent', value: 10, start_date: '', end_date: '' },
 };
 
@@ -75,6 +76,11 @@ export const PropertyEditor: React.FC = () => {
   // Special date form
   const [specialDate, setSpecialDate] = useState('');
   const [specialPrice, setSpecialPrice] = useState('');
+
+  // Day-use slot form
+  const [newSlotName, setNewSlotName] = useState('');
+  const [newSlotStart, setNewSlotStart] = useState('11:00');
+  const [newSlotEnd, setNewSlotEnd] = useState('16:00');
 
   // Helpers to update pricing sub-object
   const setPricing = (patch: Partial<PricingSettings>) =>
@@ -171,6 +177,26 @@ export const PropertyEditor: React.FC = () => {
 
   const removeSpecialDate = (date: string) =>
     setPricing({ special_dates: form.pricing.special_dates.filter(s => s.date !== date) });
+
+  const addSlot = () => {
+    if (!newSlotName.trim() || !newSlotStart || !newSlotEnd) return;
+    const newSlot: DayUseSlot = {
+      id: `slot_${Date.now()}`,
+      name: newSlotName.trim(),
+      start_time: newSlotStart,
+      end_time: newSlotEnd,
+      sunday_rate: 40, monday_rate: 40, tuesday_rate: 40, wednesday_rate: 40,
+      thursday_rate: 50, friday_rate: 60, saturday_rate: 55,
+    };
+    setPricing({ day_use_slots: [...(form.pricing.day_use_slots || []), newSlot] });
+    setNewSlotName(''); setNewSlotStart('11:00'); setNewSlotEnd('16:00');
+  };
+
+  const removeSlot = (id: string) =>
+    setPricing({ day_use_slots: (form.pricing.day_use_slots || []).filter(s => s.id !== id) });
+
+  const updateSlot = (id: string, patch: Partial<DayUseSlot>) =>
+    setPricing({ day_use_slots: (form.pricing.day_use_slots || []).map(s => s.id === id ? { ...s, ...patch } : s) });
 
   if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
 
@@ -283,6 +309,67 @@ export const PropertyEditor: React.FC = () => {
               <p className="text-[10px] text-primary-navy/40 font-medium">Collected at booking, refunded after checkout. Excluded from revenue/tax.</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Day-Use Time Slots */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <Clock size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Day-Use Time Slots</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          Define time-limited booking slots for same-day stays. Each slot has its own per-day pricing grid.
+        </p>
+
+        {(form.pricing.day_use_slots || []).map(slot => (
+          <div key={slot.id} className="bg-pearl-white rounded-xl p-4 space-y-3 border border-primary-navy/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                <p className="text-[10px] text-primary-navy/40 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+              </div>
+              <button onClick={() => removeSlot(slot.id)} className="text-primary-navy/20 hover:text-red-500 transition-colors"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {(['sunday_rate', 'monday_rate', 'tuesday_rate', 'wednesday_rate', 'thursday_rate', 'friday_rate', 'saturday_rate'] as (keyof DayUseSlot)[]).map((key, i) => (
+                <div key={key} className="space-y-1">
+                  <label className="text-[8px] font-bold uppercase text-primary-navy/30 text-center block">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</label>
+                  <input
+                    type="number"
+                    value={slot[key] as number}
+                    onChange={(e) => updateSlot(slot.id, { [key]: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-primary-navy/10 rounded-lg py-2 px-1 text-xs font-medium text-center focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="border-t border-primary-navy/5 pt-4 space-y-3">
+          <p className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-widest">Add New Slot</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Slot Name</label>
+              <input type="text" value={newSlotName} onChange={(e) => setNewSlotName(e.target.value)} placeholder="e.g. Morning Escape" className={inputClass} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Start Time</label>
+              <input type="time" value={newSlotStart} onChange={(e) => setNewSlotStart(e.target.value)} className={inputClass} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">End Time</label>
+              <input type="time" value={newSlotEnd} onChange={(e) => setNewSlotEnd(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <button
+            onClick={addSlot}
+            disabled={!newSlotName.trim() || !newSlotStart || !newSlotEnd}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-navy/5 rounded-xl text-primary-navy/60 hover:bg-primary-navy/10 transition-colors disabled:opacity-30 text-xs font-bold"
+          >
+            <Plus size={14} /> Add Slot
+          </button>
         </div>
       </section>
 
