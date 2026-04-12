@@ -45,6 +45,8 @@ export const bookingsApi = {
     slot_name?: string;
     slot_start_time?: string;
     slot_end_time?: string;
+    termsAccepted?: boolean;
+    termsAcceptedAt?: string;
   }) => {
     const booking = await firestoreBookings.create(data);
     return { booking, property_name: data.property_name };

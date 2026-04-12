@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check, FileText, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { propertiesApi, bookingsApi } from '../services/api';
 import { sendWhatsAppInvoice } from './Invoices';
@@ -55,6 +55,12 @@ export const Booking: React.FC = () => {
 
   // Thawani simulation state
   const [thawaniSimulating, setThawaniSimulating] = useState(false);
+
+  // Terms of Stay
+  const [termsOfStay, setTermsOfStay] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsNudge, setTermsNudge] = useState(false);
 
   useEffect(() => {
     propertiesApi.list()
@@ -129,6 +135,9 @@ export const Booking: React.FC = () => {
               iban: data.iban || prev.iban,
               bankPhone: data.bankPhone || '',
             }));
+          }
+          if (data.termsOfStay) {
+            setTermsOfStay(data.termsOfStay);
           }
         }
       })
@@ -257,6 +266,12 @@ export const Booking: React.FC = () => {
       newErrors.receipt = 'Please upload your bank transfer receipt';
     }
 
+    if (termsOfStay && !termsAccepted) {
+      newErrors.terms = 'Please accept the terms to proceed';
+      setTermsNudge(true);
+      setTimeout(() => setTermsNudge(false), 600);
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -351,6 +366,7 @@ export const Booking: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Save booking to Firestore as paid
+        const termsTimestamp = new Date().toISOString();
         const result = await bookingsApi.create({
           property_id: property.id,
           property_name: property.name,
@@ -371,6 +387,7 @@ export const Booking: React.FC = () => {
             slot_start_time: selectedSlot.start_time,
             slot_end_time: selectedSlot.end_time,
           } : {}),
+          ...(termsAccepted ? { termsAccepted: true, termsAcceptedAt: termsTimestamp } : {}),
         });
 
         setThawaniSimulating(false);
@@ -391,6 +408,7 @@ export const Booking: React.FC = () => {
       }
 
       // Bank transfer — save booking to Firestore
+      const bankTermsTimestamp = new Date().toISOString();
       const result = await bookingsApi.create({
         property_id: property.id,
         property_name: property.name,
@@ -412,6 +430,7 @@ export const Booking: React.FC = () => {
           slot_start_time: selectedSlot.start_time,
           slot_end_time: selectedSlot.end_time,
         } : {}),
+        ...(termsAccepted ? { termsAccepted: true, termsAcceptedAt: bankTermsTimestamp } : {}),
       });
 
       // Trigger WhatsApp invoice (will connect API next)
@@ -846,6 +865,51 @@ export const Booking: React.FC = () => {
       )}
 
       <div className="space-y-4 pt-4">
+        {/* Terms of Stay Checkbox */}
+        {termsOfStay && (isDayUse || nights > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={termsNudge ? { opacity: 1, y: 0, x: [0, -6, 6, -4, 4, 0] } : { opacity: 1, y: 0 }}
+            transition={termsNudge ? { duration: 0.4 } : undefined}
+            className={cn(
+              "rounded-[16px] p-4 transition-colors",
+              errors.terms ? "bg-red-50 border border-red-200" : "bg-surface-container-low border border-primary-navy/5"
+            )}
+          >
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-0.5 flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => { setTermsAccepted(e.target.checked); setErrors(prev => ({ ...prev, terms: '' })); }}
+                  className="sr-only"
+                />
+                <div className={cn(
+                  "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                  termsAccepted ? "bg-primary-navy border-primary-navy" : errors.terms ? "border-red-300 bg-red-50" : "border-primary-navy/20 bg-white"
+                )}>
+                  {termsAccepted && <Check size={12} className="text-white" />}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-primary-navy leading-relaxed">
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }}
+                    className="text-secondary-gold font-bold underline underline-offset-2 hover:text-secondary-gold/80 transition-colors"
+                  >
+                    Terms of Stay
+                  </button>
+                </p>
+                {errors.terms && (
+                  <p className="text-red-500 text-[10px] font-bold">{errors.terms}</p>
+                )}
+              </div>
+            </label>
+          </motion.div>
+        )}
+
         {/* Upload Progress Bar */}
         {uploadProgress !== null && (
           <motion.div
@@ -870,7 +934,7 @@ export const Booking: React.FC = () => {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || (!isDayUse && nights === 0) || maintenanceMode}
+          disabled={submitting || (!isDayUse && nights === 0) || maintenanceMode || (!!termsOfStay && !termsAccepted)}
           className="w-full bg-primary-navy text-white py-5 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {submitting ? (
@@ -908,6 +972,65 @@ export const Booking: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Terms of Stay Modal */}
+      <AnimatePresence>
+        {showTermsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            onClick={() => setShowTermsModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full sm:max-w-lg sm:rounded-[24px] rounded-t-[24px] overflow-hidden shadow-2xl max-h-[85vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-5 border-b border-primary-navy/5 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-navy flex items-center justify-center rounded-lg">
+                    <FileText className="text-secondary-gold" size={20} />
+                  </div>
+                  <div>
+                    <p className="font-headline text-sm font-bold text-primary-navy">Terms of Stay</p>
+                    <p className="text-[10px] text-primary-navy/40 uppercase tracking-widest font-bold">Al-Nakheel Sanctuary</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-primary-navy/5 rounded-full transition-colors">
+                  <X size={18} className="text-primary-navy/40" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="text-sm text-primary-navy/80 leading-relaxed whitespace-pre-wrap font-medium">
+                  {termsOfStay}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 border-t border-primary-navy/5 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setTermsAccepted(true);
+                    setErrors(prev => ({ ...prev, terms: '' }));
+                    setShowTermsModal(false);
+                  }}
+                  className="w-full bg-primary-navy text-white py-4 rounded-[16px] font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Check size={16} />
+                  I Accept the Terms
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

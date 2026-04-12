@@ -196,6 +196,8 @@ export interface FirestoreBooking {
   slot_name?: string;
   slot_start_time?: string;
   slot_end_time?: string;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
   created_at: string;
 }
 
@@ -220,6 +222,8 @@ export const firestoreBookings = {
     slot_name?: string;
     slot_start_time?: string;
     slot_end_time?: string;
+    termsAccepted?: boolean;
+    termsAcceptedAt?: string;
   }): Promise<FirestoreBooking> {
     const checkIn = new Date(data.check_in);
     const checkOut = new Date(data.check_out);
@@ -258,6 +262,10 @@ export const firestoreBookings = {
         slot_name: data.slot_name || '',
         slot_start_time: data.slot_start_time || '',
         slot_end_time: data.slot_end_time || '',
+      } : {}),
+      ...(data.termsAccepted ? {
+        termsAccepted: true,
+        termsAcceptedAt: data.termsAcceptedAt || new Date().toISOString(),
       } : {}),
       created_at: new Date().toISOString(),
     };

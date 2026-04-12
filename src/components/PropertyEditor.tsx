@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -23,6 +23,7 @@ interface PropertyDetails {
   account_name: string;
   iban: string;
   bankPhone: string;
+  termsOfStay: string;
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -58,6 +59,7 @@ const DEFAULT_DATA: PropertyDetails = {
   account_name: 'Al-Nakheel Luxury Properties LLC',
   iban: 'OM12 0123 0000 0012 3456 789',
   bankPhone: '',
+  termsOfStay: '',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -521,6 +523,30 @@ export const PropertyEditor: React.FC = () => {
             <input type="text" value={form.bankPhone} onChange={(e) => setForm(prev => ({ ...prev, bankPhone: e.target.value }))} placeholder="e.g. +968 9000 0000" className={inputClass} />
             <p className="text-[10px] text-primary-navy/40 font-medium">Shown to guests for WhatsApp/bank app transfers. Leave blank to hide.</p>
           </div>
+        </div>
+      </section>
+
+      {/* Terms of Stay */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <FileText size={16} className="text-secondary-gold" />
+          <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Terms of Stay</h3>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          Define rules, policies, refund terms, and conditions that guests must accept before booking. This text is displayed in a pop-up during checkout.
+        </p>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Terms &amp; Conditions</label>
+          <textarea
+            value={form.termsOfStay}
+            onChange={(e) => setForm(prev => ({ ...prev, termsOfStay: e.target.value }))}
+            rows={10}
+            placeholder={"e.g.\n1. Check-in is at 4:00 PM and check-out is at 12:00 PM.\n2. A refundable security deposit of 50 OMR is required.\n3. No smoking is allowed inside the property.\n4. Pets are not permitted.\n5. Cancellation within 48 hours of check-in forfeits the deposit.\n6. Guests are responsible for any damage to the property."}
+            className={cn(inputClass, "leading-relaxed resize-none font-mono text-xs")}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">
+            {form.termsOfStay.length > 0 ? `${form.termsOfStay.length} characters` : 'No terms defined yet — guests will not see a terms checkbox during booking.'}
+          </p>
         </div>
       </section>
 
