@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { Banknote, Star, ChevronLeft, ChevronRight, User, X, ArrowRight, Clock, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Banknote, Star, ChevronLeft, ChevronRight, User, X, ArrowRight, Clock, Sparkles, Pin, Trash2, MessageSquare } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { dashboardApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
 
@@ -49,6 +49,11 @@ export const Dashboard: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
+  // Testimonials
+  const [testimonials, setTestimonials] = useState<{ id: string; guest_name: string; rating: number; text: string; stay_details: string; isPinned: boolean; created_at: string }[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Calendar widget state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
@@ -69,6 +74,47 @@ export const Dashboard: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time testimonials
+  useEffect(() => {
+    const q = query(collection(db, 'testimonials'), orderBy('created_at', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setTestimonials(snapshot.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          guest_name: data.guest_name || '',
+          rating: data.rating || 0,
+          text: data.text || '',
+          stay_details: data.stay_details || '',
+          isPinned: data.isPinned === true,
+          created_at: data.created_at || '',
+        };
+      }));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleToggleTestimonialPin = async (id: string, currentlyPinned: boolean) => {
+    try {
+      await updateDoc(doc(db, 'testimonials', id), { isPinned: !currentlyPinned });
+    } catch (err) {
+      console.error('Failed to toggle testimonial pin:', err);
+    }
+  };
+
+  const handleDeleteTestimonial = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'testimonials', deleteTarget));
+    } catch (err) {
+      console.error('Failed to delete testimonial:', err);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   // Real-time listener for property status
   useEffect(() => {
@@ -547,6 +593,140 @@ export const Dashboard: React.FC = () => {
           </motion.section>
         </div>
       </div>
+
+      {/* Recent Testimonials */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
+        className="space-y-4"
+      >
+        <div className="flex justify-between items-end px-1">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={18} className="text-secondary-gold" />
+            <h3 className="font-headline text-lg font-bold text-primary-navy">Recent Testimonials</h3>
+          </div>
+          <span className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-widest">
+            {testimonials.length} review{testimonials.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {testimonials.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-primary-navy/5 p-8 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-primary-navy/5 mx-auto mb-3 flex items-center justify-center">
+              <MessageSquare size={20} className="text-primary-navy/30" />
+            </div>
+            <p className="text-sm text-primary-navy/40 font-medium">No testimonials yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {testimonials.map((t) => (
+              <div
+                key={t.id}
+                className={cn(
+                  "bg-white rounded-xl p-5 shadow-sm border transition-all",
+                  t.isPinned ? "border-secondary-gold/40 bg-secondary-gold/[0.03]" : "border-primary-navy/5"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-primary-navy">{t.guest_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={11}
+                            className={i < t.rating ? "text-secondary-gold fill-secondary-gold" : "text-primary-navy/15"}
+                          />
+                        ))}
+                      </div>
+                      {t.stay_details && (
+                        <span className="text-[10px] text-primary-navy/40 font-medium">&bull; {t.stay_details}</span>
+                      )}
+                    </div>
+                  </div>
+                  {t.isPinned && (
+                    <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-secondary-gold/10 text-secondary-gold flex-shrink-0">
+                      Public
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-primary-navy/60 leading-relaxed mb-3 line-clamp-3">{t.text}</p>
+
+                <div className="flex items-center gap-2 pt-3 border-t border-primary-navy/5">
+                  <button
+                    onClick={() => handleToggleTestimonialPin(t.id, t.isPinned)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all active:scale-95",
+                      t.isPinned
+                        ? "bg-secondary-gold/10 text-secondary-gold border border-secondary-gold/30"
+                        : "bg-primary-navy/5 text-primary-navy/50 hover:text-primary-navy/70 hover:bg-primary-navy/10"
+                    )}
+                  >
+                    <Pin size={11} className={t.isPinned ? "fill-current" : ""} />
+                    {t.isPinned ? 'Unpin' : 'Pin to Public'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(t.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-95"
+                  >
+                    <Trash2 size={11} />
+                    Remove
+                  </button>
+                  <span className="ml-auto text-[10px] text-primary-navy/30 font-medium">
+                    {new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.section>
+
+      {/* Delete Testimonial Confirmation */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[24px] w-full max-w-sm p-8 shadow-2xl text-center space-y-5"
+            >
+              <div className="w-14 h-14 bg-red-50 rounded-full mx-auto flex items-center justify-center">
+                <Trash2 size={28} className="text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-headline text-lg font-bold text-primary-navy">Remove Testimonial?</h3>
+                <p className="text-sm text-primary-navy/50">
+                  Are you sure? This review will be permanently deleted and removed from the public page.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy active:scale-[0.98] transition-all"
+                >
+                  Keep
+                </button>
+                <button
+                  onClick={handleDeleteTestimonial}
+                  disabled={deleting}
+                  className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    'Yes, Remove'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

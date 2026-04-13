@@ -607,6 +607,7 @@ export interface Testimonial {
   rating: number;
   text: string;
   stay_details: string;
+  isPinned?: boolean;
   created_at: string;
 }
 

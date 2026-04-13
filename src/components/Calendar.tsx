@@ -285,7 +285,12 @@ export const Calendar: React.FC = () => {
             >
               <div className="flex items-center gap-4">
                 <div>
-                  <p className="font-bold text-sm text-primary-navy">{arrival.guest_name}</p>
+                  <button
+                    onClick={() => navigate(`/admin/guests?id=${arrival.id}`)}
+                    className="font-bold text-sm text-primary-navy hover:text-secondary-gold transition-colors text-left"
+                  >
+                    {arrival.guest_name}
+                  </button>
                   <p className="text-xs text-primary-navy/40 font-medium">
                     {arrival.property_name} &bull; {arrival.slot_name
                       ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!)} – ${formatTime(arrival.slot_end_time!)}`
