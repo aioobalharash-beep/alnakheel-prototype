@@ -296,7 +296,7 @@ export const Calendar: React.FC = () => {
                   </button>
                   <p className="text-xs text-primary-navy/40 font-medium">
                     {arrival.property_name} &bull; {arrival.slot_name
-                      ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!)} – ${formatTime(arrival.slot_end_time!)}`
+                      ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!, lang)} – ${formatTime(arrival.slot_end_time!, lang)}`
                       : arrival.check_in === arrival.check_out
                         ? t('common.dayUse')
                         : `${new Date(arrival.check_in).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric' })} - ${new Date(arrival.check_out).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric' })}`}

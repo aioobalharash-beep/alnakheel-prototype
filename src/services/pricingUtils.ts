@@ -50,9 +50,17 @@ export interface PriceBreakdown {
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/** Format 24h time string to readable format (e.g. "14:00" → "2 PM") */
-export function formatTime(time: string): string {
+/** Format 24h time string to readable format (e.g. "14:00" → "2 PM" / "٢ م") */
+export function formatTime(time: string, lang = 'en'): string {
   const [h, m] = time.split(':').map(Number);
+  if (lang === 'ar') {
+    const period = h >= 12 ? 'م' : 'ص';
+    const hour = h % 12 || 12;
+    const hourStr = hour.toLocaleString('ar-SA');
+    if (m === 0) return `${hourStr} ${period}`;
+    const minStr = String(m).padStart(2, '0').split('').map(d => '٠١٢٣٤٥٦٧٨٩'[+d]).join('');
+    return `${hourStr}:${minStr} ${period}`;
+  }
   const period = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
   return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, '0')} ${period}`;
@@ -228,10 +236,14 @@ export function formatBreakdown(
   t?: (key: string) => string
 ): string {
   if (b.isDayUse) {
-    const label = b.slotName
-      ? `${b.slotName} ${t ? t('booking.slot') : 'Slot'}`
-      : (t ? t('common.dayUse') : 'Day Use');
-    return label;
+    if (b.slotName) {
+      // Slot-based day use → "Morning Slot" / "فترة صباحية"
+      return lang === 'ar'
+        ? b.slotName  // Already the Arabic name when caller swaps slotNameAr in
+        : `${b.slotName} Slot`;
+    }
+    // Full-day use (no slot) → "Day Use" / "يوم كامل بدون مبيت"
+    return t ? t('common.dayUse') : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
   }
   if (lang === 'ar') {
     return `${b.nights} ${t ? t(b.nights > 1 ? 'common.nights' : 'common.night') : (b.nights > 1 ? 'ليالٍ' : 'ليلة')}`;

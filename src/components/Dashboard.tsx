@@ -38,7 +38,8 @@ interface RealtimeBooking {
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -438,8 +439,8 @@ export const Dashboard: React.FC = () => {
                     <p className="text-sm font-bold text-primary-navy truncate">{b.guest_name}</p>
                     <p className="text-[10px] text-primary-navy/50 font-medium">
                       {b.property_name} &bull; {b.slot_name
-                        ? `${b.slot_name}: ${formatTime(b.slot_start_time!)} – ${formatTime(b.slot_end_time!)}`
-                        : b.check_in === b.check_out ? 'Day Use' : `${b.nights} night${b.nights > 1 ? 's' : ''}`} &bull; {b.total_amount} OMR
+                        ? `${b.slot_name}: ${formatTime(b.slot_start_time!, lang)} – ${formatTime(b.slot_end_time!, lang)}`
+                        : b.check_in === b.check_out ? t('common.dayUse') : `${b.nights} ${t(b.nights > 1 ? 'common.nights' : 'common.night')}`} &bull; {b.total_amount} {t('common.omr')}
                     </p>
                   </div>
                   <span className={cn(
@@ -506,9 +507,9 @@ export const Dashboard: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-primary-navy text-sm truncate">{nextCheckIn.guest_name}</p>
                       <p className="text-[11px] text-primary-navy/50 font-medium">
-                        {arrivalDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {arrivalDate.toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                         {' '}&bull;{' '}{nextCheckIn.property_name}
-                        {nextCheckIn.slot_name && ` &bull; ${nextCheckIn.slot_name}: ${formatTime(nextCheckIn.slot_start_time!)} – ${formatTime(nextCheckIn.slot_end_time!)}`}
+                        {nextCheckIn.slot_name && ` &bull; ${nextCheckIn.slot_name}: ${formatTime(nextCheckIn.slot_start_time!, lang)} – ${formatTime(nextCheckIn.slot_end_time!, lang)}`}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -573,8 +574,8 @@ export const Dashboard: React.FC = () => {
                       <p className="font-bold text-white text-sm truncate">{t('dashboard.newBookingFrom')} {recentBooking.guest_name}</p>
                       <p className="text-[11px] text-white/50 font-medium">
                         {recentBooking.property_name} &bull; {recentBooking.slot_name
-                          ? `${recentBooking.slot_name}: ${formatTime(recentBooking.slot_start_time!)} – ${formatTime(recentBooking.slot_end_time!)}`
-                          : recentBooking.check_in === recentBooking.check_out ? 'Day Use' : `${recentBooking.nights} night${recentBooking.nights > 1 ? 's' : ''}`}
+                          ? `${recentBooking.slot_name}: ${formatTime(recentBooking.slot_start_time!, lang)} – ${formatTime(recentBooking.slot_end_time!, lang)}`
+                          : recentBooking.check_in === recentBooking.check_out ? t('common.dayUse') : `${recentBooking.nights} ${t(recentBooking.nights > 1 ? 'common.nights' : 'common.night')}`}
                       </p>
                     </div>
                   </div>

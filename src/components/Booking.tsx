@@ -642,7 +642,7 @@ export const Booking: React.FC = () => {
             {selectedDates.end !== null
               ? isDayUse
                 ? selectedSlot
-                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
+                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name} (${formatTime(selectedSlot.start_time, lang)} – ${formatTime(selectedSlot.end_time, lang)})`
                   : dayUseSlots.length > 0
                     ? `${selectedDates.start} ${monthName.split(' ')[0]} (${t('booking.selectSlotBelow')})`
                     : `${selectedDates.start} ${monthName.split(' ')[0]} (${t('common.dayUse')})`
@@ -678,7 +678,7 @@ export const Booking: React.FC = () => {
                 >
                   <div>
                     <p className="text-sm font-bold text-primary-navy">{lang === 'ar' && slot.name_ar ? slot.name_ar : slot.name}</p>
-                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time, lang)} – {formatTime(slot.end_time, lang)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-secondary-gold font-headline">{rate} {t('common.omr')}</span>
@@ -708,9 +708,15 @@ export const Booking: React.FC = () => {
         >
           <div className="flex justify-between text-sm">
             <div>
-              <span className="text-primary-navy/60 font-medium">{isDayUse ? t('common.dayUse') : t('booking.stay')}</span>
-              {priceBreakdown.slotTime && (
-                <p className="text-[10px] text-primary-navy/40 font-medium">{priceBreakdown.slotTime}</p>
+              <span className="text-primary-navy/60 font-medium">
+                {isDayUse
+                  ? (selectedSlot ? t('common.partialBooking') : t('common.dayUse'))
+                  : t('booking.stay')}
+              </span>
+              {priceBreakdown.slotTime && selectedSlot && (
+                <p className="text-[10px] text-primary-navy/40 font-medium">
+                  {formatTime(selectedSlot.start_time, lang)} – {formatTime(selectedSlot.end_time, lang)}
+                </p>
               )}
             </div>
             <span className="font-bold text-primary-navy text-xs">
