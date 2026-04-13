@@ -229,20 +229,29 @@ export function calculateTotalPrice(
   };
 }
 
+/** Detect "Full Day" slots by English name (case-insensitive) */
+function isFullDaySlot(name?: string): boolean {
+  return !!name && /full\s*day/i.test(name);
+}
+
 /** Build a human-readable breakdown string */
 export function formatBreakdown(
   b: PriceBreakdown,
   lang = 'en',
-  t?: (key: string) => string
+  t?: (key: string) => string,
+  /** Original English slot name — used for full-day detection */
+  slotNameEn?: string
 ): string {
   if (b.isDayUse) {
     if (b.slotName) {
-      // Slot-based day use → "Morning Slot" / "فترة صباحية"
-      return lang === 'ar'
-        ? b.slotName  // Already the Arabic name when caller swaps slotNameAr in
-        : `${b.slotName} Slot`;
+      // "Full Day" slot → same label as no-slot day use
+      if (isFullDaySlot(slotNameEn || b.slotName)) {
+        return t ? t('common.dayUse') : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
+      }
+      // Partial slot → show the slot's localised name
+      return b.slotName;
     }
-    // Full-day use (no slot) → "Day Use" / "يوم كامل بدون مبيت"
+    // No slot selected → full-day use
     return t ? t('common.dayUse') : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
   }
   if (lang === 'ar') {

@@ -710,11 +710,17 @@ export const Booking: React.FC = () => {
             <div>
               <span className="text-primary-navy/60 font-medium">
                 {isDayUse
-                  ? (selectedSlot ? t('common.partialBooking') : t('common.dayUse'))
+                  ? selectedSlot
+                    ? /full\s*day/i.test(selectedSlot.name)
+                      ? t('common.dayUse')           /* يوم كامل بدون مبيت */
+                      : t('common.partialBooking')    /* حجز جزئي */
+                    : t('common.dayUse')
                   : t('booking.stay')}
               </span>
-              {priceBreakdown.slotTime && selectedSlot && (
+              {selectedSlot && (
                 <p className="text-[10px] text-primary-navy/40 font-medium">
+                  {lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name}
+                  {' · '}
                   {formatTime(selectedSlot.start_time, lang)} – {formatTime(selectedSlot.end_time, lang)}
                 </p>
               )}
@@ -722,8 +728,9 @@ export const Booking: React.FC = () => {
             <span className="font-bold text-primary-navy text-xs">
               {(() => {
                 const bd = { ...priceBreakdown };
+                const slotNameEn = bd.slotName; // keep English name for full-day detection
                 if (bd.slotName && lang === 'ar' && bd.slotNameAr) bd.slotName = bd.slotNameAr;
-                return formatBreakdown(bd, lang, t);
+                return formatBreakdown(bd, lang, t, slotNameEn);
               })()}
             </span>
           </div>
