@@ -1,15 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lato:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Noto+Serif:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lato:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-headline: "Noto Serif", serif;
   --font-body: "Plus Jakarta Sans", sans-serif;
   --font-lato: "Lato", sans-serif;
+  --font-arabic: "IBM Plex Sans Arabic", sans-serif;
 
   --color-primary-navy: #011F36;
   --color-secondary-gold: #D4AF37;
   --color-pearl-white: #FCFBF7;
-  
+
   --radius-2xl: 1.25rem;
 }
 
@@ -17,9 +18,32 @@
   body {
     @apply bg-pearl-white text-primary-navy font-body antialiased;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline;
+  }
+
+  /* Arabic typography — activated via html.ar class */
+  html.ar body {
+    font-family: "IBM Plex Sans Arabic", sans-serif;
+    line-height: 1.8;
+  }
+
+  html.ar h1, html.ar h2, html.ar h3, html.ar h4, html.ar h5, html.ar h6 {
+    font-family: "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 700;
+    line-height: 1.6;
+  }
+
+  /* Override headline/body font utilities when Arabic */
+  html.ar .font-headline {
+    font-family: "IBM Plex Sans Arabic", sans-serif;
+  }
+  html.ar .font-body {
+    font-family: "IBM Plex Sans Arabic", sans-serif;
+  }
+  html.ar .font-lato {
+    font-family: "IBM Plex Sans Arabic", sans-serif;
   }
 }
 

@@ -5,10 +5,12 @@ import { CheckCircle2, MapPin, FileText } from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdf';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useTranslation } from 'react-i18next';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, i18n } = useTranslation();
   const state = location.state as { booking?: any; propertyName?: string } | null;
 
   const booking = state?.booking;
@@ -49,8 +51,10 @@ export const Confirmation: React.FC = () => {
     ? (booking.slot_name ? `${booking.slot_name} — ${propertyName}` : `Day Use — ${propertyName}`)
     : `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`;
 
-  const handleViewInvoice = () => {
-    const doc = generateInvoicePDF({
+  const handleViewInvoice = async () => {
+    const lang = i18n.language;
+    const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
+    const pdfDoc = await generateInvoicePDF({
       id: booking.id,
       guest_name: booking.guest_name,
       room_type: propertyName,
@@ -60,10 +64,10 @@ export const Confirmation: React.FC = () => {
       total_amount: grandTotal,
       items: [
         { description: stayLabel, amount: stayTotal },
-        ...(deposit > 0 ? [{ description: 'Refundable Security Deposit', amount: deposit }] : []),
+        ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
       ],
-    });
-    const blobUrl = doc.output('bloburl');
+    }, lang);
+    const blobUrl = pdfDoc.output('bloburl');
     window.open(blobUrl as string, '_blank');
   };
 
@@ -98,13 +102,10 @@ export const Confirmation: React.FC = () => {
         {/* Heading */}
         <div className="space-y-3">
           <h1 className="font-headline text-3xl font-bold text-primary-navy leading-tight">
-            Booking {isBankTransfer ? 'Submitted' : 'Confirmed'}
+            {t('confirmation.bookingConfirmed')}
           </h1>
           <p className="text-primary-navy/40 text-sm leading-relaxed max-w-xs mx-auto">
-            {isBankTransfer
-              ? `Thank you, ${booking.guest_name.split(' ')[0]}. Your reservation at ${propertyName} is pending admin approval.`
-              : `Thank you, ${booking.guest_name.split(' ')[0]}. Your serene escape at ${propertyName} is confirmed.`
-            }
+            {t('confirmation.thankYou')}
           </p>
         </div>
 
@@ -117,33 +118,33 @@ export const Confirmation: React.FC = () => {
         >
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Check-in</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">{t('guests.checkIn')}</p>
               <p className="font-bold text-primary-navy text-sm">
                 {new Date(booking.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">Duration</p>
+            <div className="text-end">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">{t('confirmation.dates')}</p>
               <p className="font-bold text-primary-navy text-sm">
-                {isDayUse ? (booking.slot_name || 'Day Use') : `${booking.nights} Night${booking.nights > 1 ? 's' : ''}`}
+                {isDayUse ? (booking.slot_name || t('common.dayUse')) : `${booking.nights} ${booking.nights > 1 ? t('common.nights') : t('common.night')}`}
               </p>
             </div>
           </div>
 
           <div className="border-t border-primary-navy/5 pt-4 space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-primary-navy/50">Stay Total</span>
-              <span className="font-bold text-primary-navy">{stayTotal} OMR</span>
+              <span className="text-primary-navy/50">{t('confirmation.stayTotal')}</span>
+              <span className="font-bold text-primary-navy">{stayTotal} {t('common.omr')}</span>
             </div>
             {deposit > 0 && (
               <div className="flex justify-between text-xs">
-                <span className="text-primary-navy/50">Refundable Deposit</span>
-                <span className="font-bold text-primary-navy">{deposit} OMR</span>
+                <span className="text-primary-navy/50">{t('confirmation.securityDeposit')}</span>
+                <span className="font-bold text-primary-navy">{deposit} {t('common.omr')}</span>
               </div>
             )}
             <div className="flex justify-between text-sm pt-2 border-t border-primary-navy/5">
-              <span className="font-bold text-primary-navy">Grand Total</span>
-              <span className="font-bold text-secondary-gold font-headline text-lg">{grandTotal} OMR</span>
+              <span className="font-bold text-primary-navy">{t('confirmation.grandTotal')}</span>
+              <span className="font-bold text-secondary-gold font-headline text-lg">{grandTotal} {t('common.omr')}</span>
             </div>
           </div>
 
@@ -195,17 +196,17 @@ export const Confirmation: React.FC = () => {
             onClick={() => navigate('/')}
             className="w-full text-primary-navy/40 py-3 font-bold text-xs uppercase tracking-widest hover:text-primary-navy/60 transition-colors"
           >
-            Back to Home
+            {t('confirmation.returnHome')}
           </button>
         </motion.div>
 
         {/* Minimal Footer */}
         <div className="pt-8 space-y-3">
-          <p className="text-secondary-gold font-headline font-bold text-lg">Al-Nakheel</p>
+          <p className="text-secondary-gold font-headline font-bold text-lg">{t('common.alNakheel')}</p>
           <div className="flex gap-5 items-center justify-center">
-            <button onClick={() => navigate('/terms')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">Terms</button>
+            <button onClick={() => navigate('/terms')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">{t('sanctuary.termsOfStay')}</button>
             <span className="text-primary-navy/15">|</span>
-            <button onClick={() => navigate('/about')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">About</button>
+            <button onClick={() => navigate('/about')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">{t('sanctuary.aboutUs')}</button>
           </div>
           <p className="text-[9px] text-primary-navy/25 font-bold uppercase tracking-widest">
             &copy; Al-Nakheel Luxury Chalet. 2024

@@ -3,16 +3,19 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { Home, Calendar as CalendarIcon, LogIn, LogOut, ShieldCheck, Star } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import { LanguageToggle } from './LanguageToggle';
 
 export const ClientLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAdmin, logout } = useAuth();
+  const { t } = useTranslation();
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/booking', label: 'Bookings', icon: CalendarIcon },
-    { path: '/testimonials', label: 'Reviews', icon: Star },
+    { path: '/', labelKey: 'nav.home', icon: Home },
+    { path: '/booking', labelKey: 'nav.bookings', icon: CalendarIcon },
+    { path: '/testimonials', labelKey: 'nav.reviews', icon: Star },
   ];
 
   const isActive = (path: string) => {
@@ -33,14 +36,15 @@ export const ClientLayout: React.FC = () => {
           to="/"
           className="font-headline text-xl font-bold text-primary-navy tracking-widest uppercase"
         >
-          Al-Nakheel
+          {t('common.alNakheel')}
         </Link>
         <div className="flex items-center gap-3">
+          <LanguageToggle />
           {isAdmin && (
             <button
               onClick={() => navigate('/admin')}
               className="p-2 rounded-full hover:bg-primary-navy/5 text-primary-navy/40 transition-colors"
-              title="Admin Portal"
+              title={t('nav.adminPortal')}
             >
               <ShieldCheck size={20} />
             </button>
@@ -49,10 +53,10 @@ export const ClientLayout: React.FC = () => {
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-primary-navy/5 text-primary-navy transition-colors text-xs font-bold uppercase tracking-wider"
-              title="Sign Out"
+              title={t('nav.logout')}
             >
               <LogOut size={18} />
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">{t('nav.logout')}</span>
             </button>
           ) : (
             <button
@@ -60,7 +64,7 @@ export const ClientLayout: React.FC = () => {
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-navy text-white text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
             >
               <LogIn size={18} />
-              <span className="hidden sm:inline">Login</span>
+              <span className="hidden sm:inline">{t('nav.login')}</span>
             </button>
           )}
         </div>
@@ -72,7 +76,7 @@ export const ClientLayout: React.FC = () => {
       </main>
 
       {/* Client Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-12 bg-pearl-white border-t border-primary-navy/5 shadow-[0px_-10px_40px_rgba(1,31,54,0.06)] rounded-t-[20px]">
+      <nav className="fixed bottom-0 inset-x-0 z-50 flex justify-around items-center h-20 pb-safe px-12 bg-pearl-white border-t border-primary-navy/5 shadow-[0px_-10px_40px_rgba(1,31,54,0.06)] rounded-t-[20px]">
         {navItems.map((item) => (
           <button
             key={item.path}
@@ -85,7 +89,7 @@ export const ClientLayout: React.FC = () => {
             )}
           >
             <item.icon size={24} fill={isActive(item.path) ? "currentColor" : "none"} />
-            <span className="text-[11px] font-medium tracking-wide mt-1">{item.label}</span>
+            <span className="text-[11px] font-medium tracking-wide mt-1">{t(item.labelKey)}</span>
           </button>
         ))}
       </nav>

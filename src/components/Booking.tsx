@@ -10,9 +10,13 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/fi
 import { db } from '../services/firebase';
 import { calculateTotalPrice, formatBreakdown, migratePricing, formatTime, getSlotRateForDay, type PricingSettings, type PriceBreakdown, type DayUseSlot } from '../services/pricingUtils';
 import type { Property } from '../types';
+import { useTranslation } from 'react-i18next';
+import { bl } from '../utils/bilingual';
 
 export const Booking: React.FC = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +62,8 @@ export const Booking: React.FC = () => {
   const [thawaniSimulating, setThawaniSimulating] = useState(false);
 
   // Terms of Stay
-  const [termsOfStay, setTermsOfStay] = useState('');
+  const [termsOfStayRaw, setTermsOfStayRaw] = useState<any>('');
+  const termsOfStay = typeof termsOfStayRaw === 'string' ? termsOfStayRaw : bl(termsOfStayRaw, lang);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsNudge, setTermsNudge] = useState(false);
@@ -138,7 +143,7 @@ export const Booking: React.FC = () => {
             }));
           }
           if (data.termsOfStay) {
-            setTermsOfStay(data.termsOfStay);
+            setTermsOfStayRaw(data.termsOfStay);
           }
         }
       })
@@ -150,7 +155,8 @@ export const Booking: React.FC = () => {
 
   const daysInMonth = getDaysInMonth(currentMonth, currentYear);
   const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
-  const monthName = new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const dateLocale = lang === 'ar' ? 'ar-OM' : 'en-US';
+  const monthName = new Date(currentYear, currentMonth).toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -528,12 +534,12 @@ export const Booking: React.FC = () => {
         className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
       >
         <ArrowLeft size={18} />
-        Back to Home
+        {t('login.backToHome')}
       </button>
 
       <section className="text-center space-y-2">
-        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Reservation</span>
-        <h2 className="font-headline text-4xl font-bold text-primary-navy">Secure your retreat</h2>
+        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">{t('booking.bookYourStay')}</span>
+        <h2 className="font-headline text-4xl font-bold text-primary-navy">{t('booking.selectDates')}</h2>
         <p className="text-primary-navy/60 text-sm max-w-xs mx-auto">
           Select your preferred dates and provide your details to finalize your experience at {property?.name || 'Al-Nakheel'}.
         </p>
@@ -549,7 +555,7 @@ export const Booking: React.FC = () => {
           <div className="w-12 h-12 bg-red-100 rounded-full mx-auto flex items-center justify-center">
             <AlertCircle size={24} className="text-red-500" />
           </div>
-          <h3 className="font-headline font-bold text-red-700 text-lg">Bookings Temporarily Paused</h3>
+          <h3 className="font-headline font-bold text-red-700 text-lg">{t('booking.maintenanceMode')}</h3>
           <p className="text-red-600/70 text-sm max-w-xs mx-auto">
             Our chalets are currently under maintenance. Please check back soon for availability.
           </p>
@@ -582,7 +588,7 @@ export const Booking: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-7 gap-y-4 text-center text-[10px] font-bold text-primary-navy/30 uppercase tracking-tighter mb-4">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
+          {['daysSun', 'daysMon', 'daysTue', 'daysWed', 'daysThu', 'daysFri', 'daysSat'].map(d => <div key={d}>{t(`booking.${d}`)}</div>)}
         </div>
 
         <div className="grid grid-cols-7 gap-y-2 text-center text-sm font-medium">
@@ -621,11 +627,11 @@ export const Booking: React.FC = () => {
         <div className="mt-4 flex items-center gap-4 justify-center">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-red-50 border border-red-200"></span>
-            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Booked</span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">{t('booking.legendBooked')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
-            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Selected</span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">{t('booking.legendSelected')}</span>
           </div>
         </div>
 
@@ -636,12 +642,12 @@ export const Booking: React.FC = () => {
             {selectedDates.end !== null
               ? isDayUse
                 ? selectedSlot
-                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
+                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name} (${formatTime(selectedSlot.start_time, lang)} – ${formatTime(selectedSlot.end_time, lang)})`
                   : dayUseSlots.length > 0
-                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use — select a time slot below)`
-                    : `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
-                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
-              : `Tap again for Day Use, or select check-out date`}
+                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (${t('booking.selectSlotBelow')})`
+                    : `${selectedDates.start} ${monthName.split(' ')[0]} (${t('common.dayUse')})`
+                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} ${t(nights > 1 ? 'common.nights' : 'common.night')})`
+              : t('booking.tapAgainDayUse')}
           </div>
         )}
       </motion.div>
@@ -653,7 +659,7 @@ export const Booking: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-3"
         >
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Select Time Slot *</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.selectTimeSlot')} *</label>
           <div className="space-y-2">
             {availableSlots.map(slot => {
               const dow = new Date(currentYear, currentMonth, selectedDates.start!).getDay();
@@ -664,18 +670,18 @@ export const Booking: React.FC = () => {
                   key={slot.id}
                   onClick={() => { setSelectedSlot(isSelected ? null : slot); setErrors(prev => ({ ...prev, slot: '' })); }}
                   className={cn(
-                    "w-full p-4 rounded-[16px] border-2 transition-all text-left flex items-center justify-between",
+                    "w-full p-4 rounded-[16px] border-2 transition-all text-start flex items-center justify-between",
                     isSelected
                       ? "border-primary-navy bg-primary-navy/5"
                       : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
                   )}
                 >
                   <div>
-                    <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
-                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
+                    <p className="text-sm font-bold text-primary-navy">{lang === 'ar' && slot.name_ar ? slot.name_ar : slot.name}</p>
+                    <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time, lang)} – {formatTime(slot.end_time, lang)}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-secondary-gold font-headline">{rate} OMR</span>
+                    <span className="text-sm font-bold text-secondary-gold font-headline">{rate} {t('common.omr')}</span>
                     {isSelected && (
                       <div className="w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
                         <Check size={12} className="text-white" />
@@ -686,7 +692,7 @@ export const Booking: React.FC = () => {
               );
             })}
             {availableSlots.length === 0 && (
-              <p className="text-center text-sm text-primary-navy/40 py-4">All time slots are booked for this date</p>
+              <p className="text-center text-sm text-primary-navy/40 py-4">{t('booking.allSlotsBooked')}</p>
             )}
           </div>
           {errors.slot && <p className="text-red-500 text-xs font-medium">{errors.slot}</p>}
@@ -702,12 +708,31 @@ export const Booking: React.FC = () => {
         >
           <div className="flex justify-between text-sm">
             <div>
-              <span className="text-primary-navy/60 font-medium">{isDayUse ? 'Day Use' : 'Stay'}</span>
-              {priceBreakdown.slotTime && (
-                <p className="text-[10px] text-primary-navy/40 font-medium">{priceBreakdown.slotTime}</p>
+              <span className="text-primary-navy/60 font-medium">
+                {isDayUse
+                  ? selectedSlot
+                    ? /full\s*day/i.test(selectedSlot.name)
+                      ? t('common.dayUse')           /* يوم كامل بدون مبيت */
+                      : t('common.partialBooking')    /* حجز جزئي */
+                    : t('common.dayUse')
+                  : t('booking.stay')}
+              </span>
+              {selectedSlot && (
+                <p className="text-[10px] text-primary-navy/40 font-medium">
+                  {lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name}
+                  {' · '}
+                  {formatTime(selectedSlot.start_time, lang)} – {formatTime(selectedSlot.end_time, lang)}
+                </p>
               )}
             </div>
-            <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
+            <span className="font-bold text-primary-navy text-xs">
+              {(() => {
+                const bd = { ...priceBreakdown };
+                const slotNameEn = bd.slotName; // keep English name for full-day detection
+                if (bd.slotName && lang === 'ar' && bd.slotNameAr) bd.slotName = bd.slotNameAr;
+                return formatBreakdown(bd, lang, t, slotNameEn);
+              })()}
+            </span>
           </div>
 
           {/* Per-night breakdown */}
@@ -715,39 +740,39 @@ export const Booking: React.FC = () => {
             {priceBreakdown.per_night.map(n => (
               <div key={n.date} className="flex justify-between text-xs">
                 <span className="text-primary-navy/50">
-                  {new Date(n.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  {n.isSpecial && <span className="ml-1 text-secondary-gold font-bold">(Special)</span>}
+                  {new Date(n.date).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {n.isSpecial && <span className="ms-1 text-secondary-gold font-bold">({t('booking.special')})</span>}
                 </span>
-                <span className="font-bold text-primary-navy">{n.rate} OMR</span>
+                <span className="font-bold text-primary-navy">{n.rate} {t('common.omr')}</span>
               </div>
             ))}
           </div>
 
           {priceBreakdown.discount_amount > 0 && (
             <div className="flex justify-between text-sm text-emerald-600">
-              <span className="font-medium">Discount</span>
-              <span className="font-bold">-{priceBreakdown.discount_amount} OMR</span>
+              <span className="font-medium">{t('booking.discount')}</span>
+              <span className="font-bold">-{priceBreakdown.discount_amount} {t('common.omr')}</span>
             </div>
           )}
 
           <div className="pt-3 border-t border-primary-navy/5 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-primary-navy/60 font-medium">Stay Total</span>
-              <span className="font-bold text-primary-navy">{stayTotal} OMR</span>
+              <span className="text-primary-navy/60 font-medium">{t('confirmation.stayTotal')}</span>
+              <span className="font-bold text-primary-navy">{stayTotal} {t('common.omr')}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-primary-navy/60 font-medium">Refundable Deposit</span>
-              <span className="font-bold text-primary-navy">{depositAmount} OMR</span>
+              <span className="text-primary-navy/60 font-medium">{t('booking.securityDeposit')}</span>
+              <span className="font-bold text-primary-navy">{depositAmount} {t('common.omr')}</span>
             </div>
           </div>
 
           <div className="pt-4 border-t border-primary-navy/5 flex justify-between items-end">
             <div>
-              <p className="text-xl font-bold font-headline">Grand Total</p>
-              <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">Deposit refunded after checkout</p>
+              <p className="text-xl font-bold font-headline">{t('booking.grandTotal')}</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">{t('booking.refundable')}</p>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-secondary-gold font-headline">{grandTotal} OMR</p>
+            <div className="text-end">
+              <p className="text-2xl font-bold text-secondary-gold font-headline">{grandTotal} {t('common.omr')}</p>
             </div>
           </div>
         </motion.section>
@@ -756,7 +781,7 @@ export const Booking: React.FC = () => {
       {/* Form */}
       <section className="space-y-6">
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Full Name *</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.fullName')} *</label>
           <input
             type="text"
             value={guestName}
@@ -771,7 +796,7 @@ export const Booking: React.FC = () => {
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">WhatsApp Phone Number *</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.phone')} *</label>
           <div className="flex gap-3">
             <div className="bg-surface-container-low rounded-xl py-4 px-4 text-sm font-bold text-primary-navy/60">+968</div>
             <input
@@ -794,7 +819,7 @@ export const Booking: React.FC = () => {
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Email (Optional)</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.emailOptional')}</label>
           <input
             type="email"
             value={guestEmail}
@@ -812,25 +837,25 @@ export const Booking: React.FC = () => {
       {/* Payment Method Selection */}
       {(isDayUse || nights > 0) && (
         <section className="space-y-4">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Payment Method *</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.paymentMethod')} *</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => setPaymentMethod('thawani')}
               className={cn(
-                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                "relative p-5 rounded-[20px] border-2 transition-all text-start space-y-2",
                 paymentMethod === 'thawani'
                   ? "border-primary-navy bg-primary-navy/5"
                   : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
               )}
             >
               {paymentMethod === 'thawani' && (
-                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                <div className="absolute top-3 end-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
                   <Check size={12} className="text-white" />
                 </div>
               )}
               <CreditCard size={22} className={paymentMethod === 'thawani' ? "text-primary-navy" : "text-primary-navy/40"} />
-              <p className="text-sm font-bold text-primary-navy">Thawani</p>
+              <p className="text-sm font-bold text-primary-navy">{t('booking.thawani')}</p>
               <p className="text-[10px] text-primary-navy/50 font-medium">Instant online payment</p>
             </button>
 
@@ -838,19 +863,19 @@ export const Booking: React.FC = () => {
               type="button"
               onClick={() => setPaymentMethod('bank_transfer')}
               className={cn(
-                "relative p-5 rounded-[20px] border-2 transition-all text-left space-y-2",
+                "relative p-5 rounded-[20px] border-2 transition-all text-start space-y-2",
                 paymentMethod === 'bank_transfer'
                   ? "border-primary-navy bg-primary-navy/5"
                   : "border-primary-navy/10 bg-white hover:border-primary-navy/20"
               )}
             >
               {paymentMethod === 'bank_transfer' && (
-                <div className="absolute top-3 right-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
+                <div className="absolute top-3 end-3 w-5 h-5 bg-primary-navy rounded-full flex items-center justify-center">
                   <Check size={12} className="text-white" />
                 </div>
               )}
               <Building2 size={22} className={paymentMethod === 'bank_transfer' ? "text-primary-navy" : "text-primary-navy/40"} />
-              <p className="text-sm font-bold text-primary-navy">Bank Transfer</p>
+              <p className="text-sm font-bold text-primary-navy">{t('booking.bankTransfer')}</p>
               <p className="text-[10px] text-primary-navy/50 font-medium">Upload receipt for approval</p>
             </button>
           </div>
@@ -876,7 +901,7 @@ export const Booking: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Upload Transfer Receipt *</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('booking.uploadReceipt')} *</label>
                 <label
                   className={cn(
                     "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all",
@@ -936,13 +961,13 @@ export const Booking: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-primary-navy leading-relaxed">
-                  I have read and agree to the{' '}
+                  {t('booking.iAcceptTerms').split(t('booking.termsOfStay'))[0]}
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }}
                     className="text-secondary-gold font-bold underline underline-offset-2 hover:text-secondary-gold/80 transition-colors"
                   >
-                    Terms of Stay
+                    {t('booking.termsOfStay')}
                   </button>
                 </p>
                 {errors.terms && (
@@ -991,18 +1016,18 @@ export const Booking: React.FC = () => {
             ) : (
               <div className="flex items-center gap-3">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span className="text-xs normal-case tracking-normal font-medium">Processing...</span>
+                <span className="text-xs normal-case tracking-normal font-medium">{t('booking.processing')}</span>
               </div>
             )
           ) : paymentMethod === 'bank_transfer' ? (
             <>
-              Submit Booking
-              <span className="text-[10px] opacity-40 lowercase font-normal">(pending approval)</span>
+              {t('booking.submitBooking')}
+              <span className="text-[10px] opacity-40 lowercase font-normal">({t('booking.pendingApproval')})</span>
             </>
           ) : (
             <>
-              Pay with Thawani
-              <span className="text-[10px] opacity-40 lowercase font-normal">({grandTotal} OMR)</span>
+              {t('booking.payWithThawani')}
+              <span className="text-[10px] opacity-40 lowercase font-normal">({grandTotal} {t('common.omr')})</span>
             </>
           )}
         </button>
@@ -1040,7 +1065,7 @@ export const Booking: React.FC = () => {
                     <FileText className="text-secondary-gold" size={20} />
                   </div>
                   <div>
-                    <p className="font-headline text-sm font-bold text-primary-navy">Terms of Stay</p>
+                    <p className="font-headline text-sm font-bold text-primary-navy">{t('booking.termsOfStay')}</p>
                     <p className="text-[10px] text-primary-navy/40 uppercase tracking-widest font-bold">Al-Nakheel Sanctuary</p>
                   </div>
                 </div>
@@ -1067,14 +1092,14 @@ export const Booking: React.FC = () => {
                   className="w-full bg-primary-navy text-white py-4 rounded-[16px] font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
                   <Check size={16} />
-                  I Accept the Terms
+                  {t('booking.iAccept')}
                 </button>
                 <button
-                  onClick={() => downloadTermsPDF(termsOfStay)}
+                  onClick={() => downloadTermsPDF(termsOfStay, lang)}
                   className="w-full border-2 border-primary-navy/10 text-primary-navy/60 py-3.5 rounded-[16px] font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:border-primary-navy/20 hover:text-primary-navy"
                 >
                   <Download size={14} />
-                  Download Terms as PDF
+                  {t('booking.downloadTerms')}
                 </button>
               </div>
             </motion.div>

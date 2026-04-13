@@ -1,29 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText } from 'lucide-react';
+import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText, Languages } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { migratePricing, formatTime, type PricingSettings, type DayUseSlot } from '../services/pricingUtils';
+import { type BilingualField, toBilingual } from '../utils/bilingual';
 
 interface GalleryImage { url: string; label: string; }
 
 interface PropertyDetails {
-  name: string;
+  name: BilingualField;
   capacity: number;
   area_sqm: number;
   nightly_rate: number;
-  headline: string;
-  description: string;
+  headline: BilingualField;
+  description: BilingualField;
   features: string[];
+  features_ar: string[];
   gallery: GalleryImage[];
   pricing: PricingSettings;
   bank_name: string;
   account_name: string;
   iban: string;
   bankPhone: string;
-  termsOfStay: string;
+  termsOfStay: BilingualField;
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -42,13 +44,14 @@ const DEFAULT_PRICING: PricingSettings = {
 };
 
 const DEFAULT_DATA: PropertyDetails = {
-  name: 'Al-Nakheel Sanctuary',
+  name: { en: 'Al-Nakheel Sanctuary', ar: '' },
   capacity: 12,
   area_sqm: 850,
   nightly_rate: 120,
-  headline: 'Curated Excellence',
-  description: 'Nestled in the heart of the Omani landscape, Al-Nakheel offers an unparalleled blend of modern luxury and heritage-inspired architecture. Every corner of this estate has been curated to provide a seamless flow between indoor relaxation and outdoor majesty.',
+  headline: { en: 'Curated Excellence', ar: '' },
+  description: { en: 'Nestled in the heart of the Omani landscape, Al-Nakheel offers an unparalleled blend of modern luxury and heritage-inspired architecture. Every corner of this estate has been curated to provide a seamless flow between indoor relaxation and outdoor majesty.', ar: '' },
   features: ['Concierge Service', 'Daily Maintenance', 'Private Parking', 'Secure Perimeter'],
+  features_ar: ['', '', '', ''],
   gallery: [
     { url: 'https://picsum.photos/seed/oman-bedroom-1/800/1000', label: 'Master Suite: Serene Sands' },
     { url: 'https://picsum.photos/seed/oman-bedroom-2/800/1000', label: 'Guest Wing: Golden Hour' },
@@ -59,7 +62,7 @@ const DEFAULT_DATA: PropertyDetails = {
   account_name: 'Al-Nakheel Luxury Properties LLC',
   iban: 'OM12 0123 0000 0012 3456 789',
   bankPhone: '',
-  termsOfStay: '',
+  termsOfStay: { en: '', ar: '' },
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -81,8 +84,10 @@ export const PropertyEditor: React.FC = () => {
 
   // Day-use slot form
   const [newSlotName, setNewSlotName] = useState('');
+  const [newSlotNameAr, setNewSlotNameAr] = useState('');
   const [newSlotStart, setNewSlotStart] = useState('11:00');
   const [newSlotEnd, setNewSlotEnd] = useState('16:00');
+  const [newFeatureAr, setNewFeatureAr] = useState('');
 
   // Helpers to update pricing sub-object
   const setPricing = (patch: Partial<PricingSettings>) =>
@@ -98,10 +103,17 @@ export const PropertyEditor: React.FC = () => {
     getDoc(doc(db, 'settings', 'property_details'))
       .then(snap => {
         if (snap.exists()) {
-          const data = snap.data() as Partial<PropertyDetails>;
+          const data = snap.data() as any;
+          const features = data.features || DEFAULT_DATA.features;
           setForm({
             ...DEFAULT_DATA,
             ...data,
+            name: toBilingual(data.name),
+            headline: toBilingual(data.headline),
+            description: toBilingual(data.description),
+            termsOfStay: toBilingual(data.termsOfStay),
+            features,
+            features_ar: data.features_ar || features.map(() => ''),
             pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
           });
         }
@@ -164,9 +176,18 @@ export const PropertyEditor: React.FC = () => {
 
   const addFeature = () => {
     const t = newFeature.trim();
-    if (t && !form.features.includes(t)) { setForm(prev => ({ ...prev, features: [...prev.features, t] })); setNewFeature(''); }
+    const tAr = newFeatureAr.trim();
+    if (t && !form.features.includes(t)) {
+      setForm(prev => ({ ...prev, features: [...prev.features, t], features_ar: [...(prev.features_ar || []), tAr] }));
+      setNewFeature('');
+      setNewFeatureAr('');
+    }
   };
-  const removeFeature = (i: number) => setForm(prev => ({ ...prev, features: prev.features.filter((_, j) => j !== i) }));
+  const removeFeature = (i: number) => setForm(prev => ({
+    ...prev,
+    features: prev.features.filter((_, j) => j !== i),
+    features_ar: (prev.features_ar || []).filter((_, j) => j !== i),
+  }));
 
   const addSpecialDate = () => {
     if (!specialDate || !specialPrice) return;
@@ -185,13 +206,14 @@ export const PropertyEditor: React.FC = () => {
     const newSlot: DayUseSlot = {
       id: `slot_${Date.now()}`,
       name: newSlotName.trim(),
+      name_ar: newSlotNameAr.trim() || undefined,
       start_time: newSlotStart,
       end_time: newSlotEnd,
       sunday_rate: 40, monday_rate: 40, tuesday_rate: 40, wednesday_rate: 40,
       thursday_rate: 50, friday_rate: 60, saturday_rate: 55,
     };
     setPricing({ day_use_slots: [...(form.pricing.day_use_slots || []), newSlot] });
-    setNewSlotName(''); setNewSlotStart('11:00'); setNewSlotEnd('16:00');
+    setNewSlotName(''); setNewSlotNameAr(''); setNewSlotStart('11:00'); setNewSlotEnd('16:00');
   };
 
   const removeSlot = (id: string) =>
@@ -223,7 +245,7 @@ export const PropertyEditor: React.FC = () => {
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
                 <button onClick={() => removeImage(i)} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow-lg"><X size={14} className="text-red-500" /></button>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3">
                 <p className="text-white text-xs font-bold truncate">{img.label}</p>
               </div>
             </div>
@@ -254,7 +276,7 @@ export const PropertyEditor: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Property Name</label>
-            <input type="text" value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))} className={inputClass} />
+            <input type="text" value={form.name.en} onChange={(e) => setForm(prev => ({ ...prev, name: { ...prev.name, en: e.target.value } }))} className={inputClass} />
           </div>
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Capacity (Guests)</label>
@@ -264,6 +286,12 @@ export const PropertyEditor: React.FC = () => {
             <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Area (m²)</label>
             <input type="number" value={form.area_sqm} onChange={(e) => setForm(prev => ({ ...prev, area_sqm: parseInt(e.target.value) || 0 }))} className={inputClass} />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+            <Languages size={12} /> Property Name (Arabic)
+          </label>
+          <input type="text" dir="rtl" value={form.name.ar} onChange={(e) => setForm(prev => ({ ...prev, name: { ...prev.name, ar: e.target.value } }))} placeholder="e.g. النخيل" className={inputClass} />
         </div>
       </section>
 
@@ -320,11 +348,22 @@ export const PropertyEditor: React.FC = () => {
         {(form.pricing.day_use_slots || []).map(slot => (
           <div key={slot.id} className="bg-pearl-white rounded-xl p-4 space-y-3 border border-primary-navy/5">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 me-3">
                 <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                {slot.name_ar && <p className="text-xs text-primary-navy/50 font-medium" dir="rtl">{slot.name_ar}</p>}
                 <p className="text-[10px] text-primary-navy/40 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
               </div>
-              <button onClick={() => removeSlot(slot.id)} className="text-primary-navy/20 hover:text-red-500 transition-colors"><X size={16} /></button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  dir="rtl"
+                  value={slot.name_ar || ''}
+                  onChange={(e) => updateSlot(slot.id, { name_ar: e.target.value })}
+                  placeholder="اسم الفترة"
+                  className="w-40 bg-white border border-primary-navy/10 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+                />
+                <button onClick={() => removeSlot(slot.id)} className="text-primary-navy/20 hover:text-red-500 transition-colors"><X size={16} /></button>
+              </div>
             </div>
             <div className="grid grid-cols-7 gap-2">
               {(['sunday_rate', 'monday_rate', 'tuesday_rate', 'wednesday_rate', 'thursday_rate', 'friday_rate', 'saturday_rate'] as (keyof DayUseSlot)[]).map((key, i) => (
@@ -344,11 +383,19 @@ export const PropertyEditor: React.FC = () => {
 
         <div className="border-t border-primary-navy/5 pt-4 space-y-3">
           <p className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-widest">Add New Slot</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Slot Name</label>
               <input type="text" value={newSlotName} onChange={(e) => setNewSlotName(e.target.value)} placeholder="e.g. Morning Escape" className={inputClass} />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 flex items-center gap-1.5">
+                <Languages size={10} /> Slot Name (Arabic)
+              </label>
+              <input type="text" dir="rtl" value={newSlotNameAr} onChange={(e) => setNewSlotNameAr(e.target.value)} placeholder="e.g. الفترة الصباحية" className={inputClass} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Start Time</label>
               <input type="time" value={newSlotStart} onChange={(e) => setNewSlotStart(e.target.value)} className={inputClass} />
@@ -529,16 +576,32 @@ export const PropertyEditor: React.FC = () => {
           Define rules, policies, refund terms, and conditions that guests must accept before booking. This text is displayed in a pop-up during checkout.
         </p>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Terms &amp; Conditions</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Terms &amp; Conditions (English)</label>
           <textarea
-            value={form.termsOfStay}
-            onChange={(e) => setForm(prev => ({ ...prev, termsOfStay: e.target.value }))}
+            value={form.termsOfStay.en}
+            onChange={(e) => setForm(prev => ({ ...prev, termsOfStay: { ...prev.termsOfStay, en: e.target.value } }))}
             rows={10}
             placeholder={"e.g.\n1. Check-in is at 4:00 PM and check-out is at 12:00 PM.\n2. A refundable security deposit of 50 OMR is required.\n3. No smoking is allowed inside the property.\n4. Pets are not permitted.\n5. Cancellation within 48 hours of check-in forfeits the deposit.\n6. Guests are responsible for any damage to the property."}
             className={cn(inputClass, "leading-relaxed resize-none font-mono text-xs")}
           />
           <p className="text-[10px] text-primary-navy/40 font-medium">
-            {form.termsOfStay.length > 0 ? `${form.termsOfStay.length} characters` : 'No terms defined yet — guests will not see a terms checkbox during booking.'}
+            {form.termsOfStay.en.length > 0 ? `${form.termsOfStay.en.length} characters` : 'No terms defined yet — guests will not see a terms checkbox during booking.'}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+            <Languages size={12} /> Terms &amp; Conditions (Arabic)
+          </label>
+          <textarea
+            dir="rtl"
+            value={form.termsOfStay.ar}
+            onChange={(e) => setForm(prev => ({ ...prev, termsOfStay: { ...prev.termsOfStay, ar: e.target.value } }))}
+            rows={10}
+            placeholder="أدخل الشروط والأحكام بالعربية..."
+            className={cn(inputClass, "leading-relaxed resize-none font-mono text-xs")}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">
+            {form.termsOfStay.ar.length > 0 ? `${form.termsOfStay.ar.length} characters` : 'Leave blank to show English version for Arabic users.'}
           </p>
         </div>
       </section>
@@ -548,27 +611,52 @@ export const PropertyEditor: React.FC = () => {
         <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Description</h3>
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Section Headline</label>
-          <input type="text" value={form.headline} onChange={(e) => setForm(prev => ({ ...prev, headline: e.target.value }))} placeholder="e.g. Curated Excellence" className={inputClass} />
+          <input type="text" value={form.headline.en} onChange={(e) => setForm(prev => ({ ...prev, headline: { ...prev.headline, en: e.target.value } }))} placeholder="e.g. Curated Excellence" className={inputClass} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+            <Languages size={12} /> Section Headline (Arabic)
+          </label>
+          <input type="text" dir="rtl" value={form.headline.ar} onChange={(e) => setForm(prev => ({ ...prev, headline: { ...prev.headline, ar: e.target.value } }))} placeholder="e.g. تميز مُنسّق" className={inputClass} />
         </div>
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Summary Text</label>
-          <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} rows={4} className={cn(inputClass, "leading-relaxed resize-none")} />
+          <textarea value={form.description.en} onChange={(e) => setForm(prev => ({ ...prev, description: { ...prev.description, en: e.target.value } }))} rows={4} className={cn(inputClass, "leading-relaxed resize-none")} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+            <Languages size={12} /> Summary Text (Arabic)
+          </label>
+          <textarea dir="rtl" value={form.description.ar} onChange={(e) => setForm(prev => ({ ...prev, description: { ...prev.description, ar: e.target.value } }))} rows={4} placeholder="أدخل الوصف بالعربية..." className={cn(inputClass, "leading-relaxed resize-none")} />
         </div>
       </section>
 
       {/* Features */}
       <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
         <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Features</h3>
-        <div className="flex flex-wrap gap-2">
+        <div className="space-y-2">
           {form.features.map((f, i) => (
-            <span key={i} className="flex items-center gap-1.5 bg-pearl-white border border-primary-navy/10 rounded-full px-3 py-1.5 text-xs font-bold text-primary-navy">
-              {f}
-              <button onClick={() => removeFeature(i)} className="text-primary-navy/30 hover:text-red-500 transition-colors"><X size={12} /></button>
-            </span>
+            <div key={i} className="flex items-center gap-2 bg-pearl-white border border-primary-navy/10 rounded-xl px-4 py-2.5">
+              <span className="text-xs font-bold text-primary-navy min-w-[120px]">{f}</span>
+              <input
+                type="text"
+                dir="rtl"
+                value={(form.features_ar || [])[i] || ''}
+                onChange={(e) => setForm(prev => {
+                  const updated = [...(prev.features_ar || prev.features.map(() => ''))];
+                  updated[i] = e.target.value;
+                  return { ...prev, features_ar: updated };
+                })}
+                placeholder="الترجمة العربية"
+                className="flex-1 bg-white border border-primary-navy/10 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+              />
+              <button onClick={() => removeFeature(i)} className="text-primary-navy/30 hover:text-red-500 transition-colors"><X size={14} /></button>
+            </div>
           ))}
         </div>
         <div className="flex gap-2">
-          <input type="text" value={newFeature} onChange={(e) => setNewFeature(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFeature()} placeholder="Add a feature (e.g. Pool, WiFi)" className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs placeholder:text-primary-navy/25 focus:ring-1 focus:ring-secondary-gold/50 outline-none" />
+          <input type="text" value={newFeature} onChange={(e) => setNewFeature(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFeature()} placeholder="Feature (English)" className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs placeholder:text-primary-navy/25 focus:ring-1 focus:ring-secondary-gold/50 outline-none" />
+          <input type="text" dir="rtl" value={newFeatureAr} onChange={(e) => setNewFeatureAr(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addFeature()} placeholder="بالعربية (اختياري)" className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs placeholder:text-primary-navy/25 focus:ring-1 focus:ring-secondary-gold/50 outline-none" />
           <button onClick={addFeature} disabled={!newFeature.trim()} className="px-4 py-2.5 bg-primary-navy/5 rounded-xl text-primary-navy/60 hover:bg-primary-navy/10 transition-colors disabled:opacity-30">
             <Plus size={16} />
           </button>

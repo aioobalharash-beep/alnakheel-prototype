@@ -1,6 +1,7 @@
 export interface DayUseSlot {
   id: string;
   name: string;
+  name_ar?: string;
   start_time: string;  // HH:MM
   end_time: string;    // HH:MM
   sunday_rate: number;
@@ -43,14 +44,23 @@ export interface PriceBreakdown {
   total: number;
   per_night: { date: string; dayLabel: string; rate: number; isSpecial: boolean }[];
   slotName?: string;
+  slotNameAr?: string;
   slotTime?: string;
 }
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/** Format 24h time string to readable format (e.g. "14:00" → "2 PM") */
-export function formatTime(time: string): string {
+/** Format 24h time string to readable format (e.g. "14:00" → "2 PM" / "٢ م") */
+export function formatTime(time: string, lang = 'en'): string {
   const [h, m] = time.split(':').map(Number);
+  if (lang === 'ar') {
+    const period = h >= 12 ? 'م' : 'ص';
+    const hour = h % 12 || 12;
+    const hourStr = hour.toLocaleString('ar-SA');
+    if (m === 0) return `${hourStr} ${period}`;
+    const minStr = String(m).padStart(2, '0').split('').map(d => '٠١٢٣٤٥٦٧٨٩'[+d]).join('');
+    return `${hourStr}:${minStr} ${period}`;
+  }
   const period = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
   return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, '0')} ${period}`;
@@ -137,6 +147,7 @@ export function calculateTotalPrice(
           total: Math.max(0, rate - discountAmount),
           per_night: [{ date: dateStr, dayLabel, rate, isSpecial }],
           slotName: slot.name,
+          slotNameAr: slot.name_ar,
           slotTime: `${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`,
         };
       }
@@ -218,9 +229,34 @@ export function calculateTotalPrice(
   };
 }
 
+/** Detect "Full Day" slots by English name (case-insensitive) */
+function isFullDaySlot(name?: string): boolean {
+  return !!name && /full\s*day/i.test(name);
+}
+
 /** Build a human-readable breakdown string */
-export function formatBreakdown(b: PriceBreakdown): string {
-  if (b.isDayUse) return b.slotName ? `${b.slotName} Slot` : 'Day Use';
+export function formatBreakdown(
+  b: PriceBreakdown,
+  lang = 'en',
+  t?: (key: string) => string,
+  /** Original English slot name — used for full-day detection */
+  slotNameEn?: string
+): string {
+  if (b.isDayUse) {
+    if (b.slotName) {
+      // "Full Day" slot → same label as no-slot day use
+      if (isFullDaySlot(slotNameEn || b.slotName)) {
+        return t ? t('common.dayUse') : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
+      }
+      // Partial slot → show the slot's localised name
+      return b.slotName;
+    }
+    // No slot selected → full-day use
+    return t ? t('common.dayUse') : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
+  }
+  if (lang === 'ar') {
+    return `${b.nights} ${t ? t(b.nights > 1 ? 'common.nights' : 'common.night') : (b.nights > 1 ? 'ليالٍ' : 'ليلة')}`;
+  }
   return `${b.nights} Night${b.nights > 1 ? 's' : ''}`;
 }
 

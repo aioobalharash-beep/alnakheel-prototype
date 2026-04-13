@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useTranslation } from 'react-i18next';
+import { bl, type BilingualField } from '../utils/bilingual';
 
 interface PricingSettings {
   sunday_rate?: number;
@@ -20,13 +22,14 @@ interface PricingSettings {
 }
 
 interface PropertyDetails {
-  name: string;
+  name: string | BilingualField;
   capacity: number;
   area_sqm: number;
   nightly_rate: number;
-  headline: string;
-  description: string;
+  headline: string | BilingualField;
+  description: string | BilingualField;
   features: string[];
+  features_ar?: string[];
   gallery: { url: string; label: string }[];
   pricing?: PricingSettings;
 }
@@ -48,6 +51,8 @@ const DEFAULTS: PropertyDetails = {
 
 export const Sanctuary: React.FC = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [data, setData] = useState<PropertyDetails>(DEFAULTS);
   const [loading, setLoading] = useState(true);
 
@@ -99,8 +104,8 @@ export const Sanctuary: React.FC = () => {
       <section className="px-6 mt-8">
         <div className="flex justify-between items-end mb-6">
           <div>
-            <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase block mb-1">Estate Preview</span>
-            <h2 className="font-headline text-3xl font-bold text-primary-navy">{data.name}</h2>
+            <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase block mb-1">{t('sanctuary.estatePreview')}</span>
+            <h2 className="font-headline text-3xl font-bold text-primary-navy">{bl(data.name, lang)}</h2>
           </div>
         </div>
 
@@ -131,22 +136,22 @@ export const Sanctuary: React.FC = () => {
       <section className="px-6 grid grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
           <Users className="text-secondary-gold mb-2" size={20} />
-          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">Capacity</p>
-          <p className="font-headline text-lg font-bold">{data.capacity} Guests</p>
+          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.capacity')}</p>
+          <p className="font-headline text-lg font-bold">{data.capacity} {t('common.guests')}</p>
         </div>
         <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
           <Ruler className="text-secondary-gold mb-2" size={20} />
-          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">Area</p>
+          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.area')}</p>
           <p className="font-headline text-lg font-bold">{data.area_sqm} m&sup2;</p>
         </div>
       </section>
 
       {/* Description */}
       <section className="px-6">
-        <h3 className="font-headline text-xl font-bold mb-4">{data.headline}</h3>
-        <p className="text-primary-navy/60 leading-relaxed text-sm">{data.description}</p>
+        <h3 className="font-headline text-xl font-bold mb-4">{bl(data.headline, lang)}</h3>
+        <p className="text-primary-navy/60 leading-relaxed text-sm">{bl(data.description, lang)}</p>
         <div className="mt-4 text-sm text-primary-navy/60">
-          <span className="font-bold text-secondary-gold">From {(() => {
+          <span className="font-bold text-secondary-gold">{t('sanctuary.from')} {(() => {
             const p = data.pricing;
             if (!p) return data.nightly_rate;
             const dayRates = [
@@ -167,14 +172,16 @@ export const Sanctuary: React.FC = () => {
               }
             }
             return minRate;
-          })()} OMR</span> per night
+          })()} {t('common.omr')}</span> {t('common.perNight')}
         </div>
         {data.features.length > 0 && (
           <div className="mt-8 grid grid-cols-2 gap-y-4">
-            {data.features.map(item => (
+            {data.features.map((item, idx) => (
               <div key={item} className="flex items-center gap-3">
                 <CheckCircle2 className="text-secondary-gold" size={16} />
-                <span className="text-xs font-bold text-primary-navy/80">{item}</span>
+                <span className="text-xs font-bold text-primary-navy/80">
+                  {lang === 'ar' && data.features_ar?.[idx] ? data.features_ar[idx] : item}
+                </span>
               </div>
             ))}
           </div>
@@ -183,16 +190,16 @@ export const Sanctuary: React.FC = () => {
 
       {/* Footer Info */}
       <footer className="w-full py-12 px-8 bg-white border-t border-primary-navy/5 flex flex-col items-center gap-6">
-        <div className="text-secondary-gold font-bold font-headline text-xl">{data.name}</div>
+        <div className="text-secondary-gold font-bold font-headline text-xl">{bl(data.name, lang)}</div>
         <p className="text-xs text-center text-primary-navy/60 leading-relaxed max-w-xs">
-          Exceptional luxury chalets curated for the modern traveler in the heart of Oman's desert landscape.
+          {t('sanctuary.footerDesc')}
         </p>
         <div className="text-[10px] text-primary-navy/30 uppercase font-bold tracking-widest text-center">
           CR: 1234567 | Tourism License: TL-889
         </div>
         <div className="flex gap-6 items-center">
-          <button onClick={() => navigate('/terms')} className="text-xs text-primary-navy/60 underline font-bold">Terms of Stay</button>
-          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">About Us</button>
+          <button onClick={() => navigate('/terms')} className="text-xs text-primary-navy/60 underline font-bold">{t('sanctuary.termsOfStay')}</button>
+          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">{t('sanctuary.aboutUs')}</button>
         </div>
         <div className="flex gap-8 mt-2">
           <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
@@ -210,10 +217,10 @@ export const Sanctuary: React.FC = () => {
       {/* Floating Book Now */}
       <button
         onClick={() => navigate('/booking')}
-        className="fixed bottom-[104px] right-[24px] z-[60] flex items-center gap-2 bg-secondary-gold text-primary-navy px-6 py-3.5 rounded-[20px] shadow-[0px_10px_25px_rgba(212,175,55,0.3)] hover:scale-105 transition-transform active:scale-95"
+        className="fixed bottom-[104px] end-[24px] z-[60] flex items-center gap-2 bg-secondary-gold text-primary-navy px-6 py-3.5 rounded-[20px] shadow-[0px_10px_25px_rgba(212,175,55,0.3)] hover:scale-105 transition-transform active:scale-95"
       >
         <CalendarIcon size={20} />
-        <span className="font-bold text-sm tracking-wide">Book Now</span>
+        <span className="font-bold text-sm tracking-wide">{t('sanctuary.bookNow')}</span>
       </button>
     </div>
   );
