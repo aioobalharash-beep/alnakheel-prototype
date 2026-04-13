@@ -59,6 +59,7 @@ const STATUS_CONFIG: Record<DisplayStatus, { label: string; badgeClass: string }
 export const Guests: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightName = searchParams.get('highlight');
+  const highlightId = searchParams.get('id');
   const highlightedRef = useRef<HTMLDivElement>(null);
 
   const [rawBookings, setRawBookings] = useState<BookingGuest[]>([]);
@@ -150,14 +151,14 @@ export const Guests: React.FC = () => {
     completed: rawBookings.filter(g => g.displayStatus === 'completed').length,
   }), [rawBookings]);
 
-  // Scroll to highlighted guest
+  // Scroll to highlighted guest (by name or booking id)
   useEffect(() => {
-    if (!loading && highlightName && highlightedRef.current) {
+    if (!loading && (highlightName || highlightId) && highlightedRef.current) {
       highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const timer = setTimeout(() => setSearchParams({}, { replace: true }), 3000);
       return () => clearTimeout(timer);
     }
-  }, [loading, highlightName, guests]);
+  }, [loading, highlightName, highlightId, guests]);
 
   const handleApprove = async (bookingId: string) => {
     try {
@@ -194,16 +195,16 @@ export const Guests: React.FC = () => {
     if (!addForm.phone.trim()) errs.phone = 'Phone is required';
     if (!addForm.check_in) errs.check_in = 'Check-in date is required';
     if (!addForm.check_out) errs.check_out = 'Check-out date is required';
-    if (!addForm.property_id) errs.property_id = 'Property is required';
     setAddErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     setAddSubmitting(true);
     try {
-      const prop = properties.find(p => p.id === addForm.property_id);
+      // Single-property app: auto-assign the first property
+      const prop = properties[0];
       await firestoreBookings.create({
-        property_id: addForm.property_id,
-        property_name: addForm.property_name || prop?.name || '',
+        property_id: prop?.id || 'default',
+        property_name: prop?.name || 'Al-Nakheel Chalet',
         guest_name: addForm.name.trim(),
         guest_phone: `+968${addForm.phone.replace(/\s/g, '')}`,
         guest_email: addForm.email || undefined,
@@ -294,7 +295,7 @@ export const Guests: React.FC = () => {
           <p className="text-center text-sm text-primary-navy/40 py-12">No guests found</p>
         ) : (
           guests.map((guest, i) => {
-            const isHighlighted = highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase();
+            const isHighlighted = (highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase()) || (highlightId && guest.id === highlightId);
             const cfg = STATUS_CONFIG[guest.displayStatus];
             const isActive = guest.displayStatus !== 'completed';
 
@@ -603,22 +604,6 @@ export const Guests: React.FC = () => {
                   placeholder="guest@email.com"
                   className="w-full bg-surface-container-low border border-transparent rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Property *</label>
-                <select
-                  value={addForm.property_id}
-                  onChange={(e) => {
-                    const prop = properties.find(p => p.id === e.target.value);
-                    setAddForm(p => ({ ...p, property_id: e.target.value, property_name: prop?.name || '' }));
-                  }}
-                  className={cn("w-full bg-surface-container-low border rounded-xl py-3 px-4 text-sm", addErrors.property_id ? "border-red-300" : "border-transparent")}
-                >
-                  <option value="">Select property...</option>
-                  {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-                {addErrors.property_id && <p className="text-red-500 text-xs">{addErrors.property_id}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
