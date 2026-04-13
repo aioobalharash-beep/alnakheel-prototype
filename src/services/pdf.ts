@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { registerArabicFont } from './fontLoader';
 
 interface InvoiceData {
   id: string;
@@ -11,188 +12,267 @@ interface InvoiceData {
   items?: { description: string; amount: number }[];
 }
 
-export function generateInvoicePDF(invoice: InvoiceData): jsPDF {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Pick font family based on language */
+function fontFamily(lang: string): string {
+  return lang === 'ar' ? 'IBMPlexArabic' : 'helvetica';
+}
+
+/** Text alignment shorthand — flips for RTL */
+function align(side: 'left' | 'right', lang: string): 'left' | 'right' {
+  if (lang !== 'ar') return side;
+  return side === 'left' ? 'right' : 'left';
+}
+
+/** X position — mirrors for RTL */
+function xPos(x: number, pageWidth: number, lang: string): number {
+  return lang === 'ar' ? pageWidth - x : x;
+}
+
+// ---------------------------------------------------------------------------
+// Invoice PDF
+// ---------------------------------------------------------------------------
+
+export async function generateInvoicePDF(invoice: InvoiceData, lang = 'en'): Promise<jsPDF> {
   const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const pw = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  const isAr = lang === 'ar';
+
+  if (isAr) await registerArabicFont(doc);
+
+  const ff = fontFamily(lang);
   let y = 20;
 
-  // Header
+  // ---- Header ----
+  const headerX = xPos(margin, pw, lang);
+  const headerAlign = align('left', lang);
+
   doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text('AL-NAKHEEL LUXURY PROPERTIES', 20, y);
+  doc.setFont(ff, 'bold');
+  doc.setTextColor(1, 31, 54);
+  doc.text(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', headerX, y, { align: headerAlign });
   y += 8;
+
   doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(ff, 'normal');
   doc.setTextColor(100);
-  doc.text('Muscat, Sultanate of Oman', 20, y);
+  doc.text(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', headerX, y, { align: headerAlign });
   y += 4;
-  doc.text('CR: 1234567  |  Tourism License: TL-889', 20, y);
+  doc.text(isAr ? 'سجل تجاري: 1234567  |  ترخيص سياحي: TL-889' : 'CR: 1234567  |  Tourism License: TL-889', headerX, y, { align: headerAlign });
 
   y += 15;
   doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
+  doc.line(margin, y, pw - margin, y);
   y += 12;
 
-  // Invoice details
+  // ---- Invoice title ----
   doc.setTextColor(1, 31, 54);
   doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`INVOICE`, 20, y);
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text(`#${invoice.id.slice(0, 8).toUpperCase()}`, 55, y);
+  doc.setFont(ff, 'bold');
+  doc.text(isAr ? 'فاتورة' : 'INVOICE', xPos(margin, pw, lang), y, { align: headerAlign });
+
+  // Invoice number — placed after title
+  const idLabel = `#${invoice.id.slice(0, 8).toUpperCase()}`;
+  if (isAr) {
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(idLabel, xPos(margin, pw, lang) - doc.getTextWidth(isAr ? 'فاتورة' : 'INVOICE') - 8, y, { align: 'right' });
+  } else {
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(idLabel, 55, y);
+  }
   y += 14;
 
-  // Billed To / Date
+  // ---- Billed To / Issue Date ----
+  const leftX = xPos(margin, pw, lang);
+  const rightX = xPos(pw - 60, pw, lang);
+  const leftAlign = align('left', lang);
+  const rightAlign = align('right', lang);
+
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.setFont('helvetica', 'bold');
-  doc.text('BILLED TO', 20, y);
-  doc.text('ISSUE DATE', pageWidth - 60, y);
+  doc.setFont(ff, 'bold');
+  doc.text(isAr ? 'فاتورة إلى' : 'BILLED TO', leftX, y, { align: leftAlign });
+  doc.text(isAr ? 'تاريخ الإصدار' : 'ISSUE DATE', rightX, y, { align: rightAlign });
   y += 6;
+
   doc.setFontSize(11);
   doc.setTextColor(1, 31, 54);
-  doc.setFont('helvetica', 'bold');
-  doc.text(invoice.guest_name, 20, y);
-  doc.text(new Date(invoice.issued_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), pageWidth - 60, y);
+  doc.setFont(ff, 'bold');
+  doc.text(invoice.guest_name, leftX, y, { align: leftAlign });
+  const dateLocale = isAr ? 'ar-OM' : 'en-GB';
+  doc.text(new Date(invoice.issued_date).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' }), rightX, y, { align: rightAlign });
   y += 5;
+
   doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.setFont('helvetica', 'normal');
-  doc.text(invoice.room_type, 20, y);
+  doc.setFont(ff, 'normal');
+  doc.text(invoice.room_type, leftX, y, { align: leftAlign });
   y += 14;
 
   doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
+  doc.line(margin, y, pw - margin, y);
   y += 8;
 
-  // Table header
+  // ---- Table header ----
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.setFont('helvetica', 'bold');
-  doc.text('DESCRIPTION', 20, y);
-  doc.text('AMOUNT (OMR)', pageWidth - 55, y);
+  doc.setFont(ff, 'bold');
+  doc.text(isAr ? 'البيان' : 'DESCRIPTION', leftX, y, { align: leftAlign });
+  doc.text(isAr ? 'المبلغ (ر.ع.)' : 'AMOUNT (OMR)', rightX, y, { align: rightAlign });
   y += 4;
   doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
+  doc.line(margin, y, pw - margin, y);
   y += 10;
 
-  // Items
+  // ---- Items ----
   doc.setFontSize(10);
   doc.setTextColor(1, 31, 54);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(ff, 'normal');
+
   if (invoice.items && invoice.items.length > 0) {
     for (const item of invoice.items) {
       const isDeposit = item.description.toLowerCase().includes('deposit');
       if (isDeposit) {
-        doc.setFont('helvetica', 'italic');
+        doc.setFont(ff, 'normal');
         doc.setTextColor(100);
       }
-      doc.text(item.description, 20, y);
-      doc.setFont('helvetica', 'bold');
-      doc.text(item.amount.toFixed(2), pageWidth - 55, y);
-      doc.setFont('helvetica', 'normal');
+      doc.text(item.description, leftX, y, { align: leftAlign });
+      doc.setFont(ff, 'bold');
+      doc.text(item.amount.toFixed(2), rightX, y, { align: rightAlign });
+      doc.setFont(ff, 'normal');
       doc.setTextColor(1, 31, 54);
       y += 10;
     }
   } else {
-    doc.text(`Stay Charges - ${invoice.room_type}`, 20, y);
-    doc.setFont('helvetica', 'bold');
-    doc.text(invoice.subtotal.toFixed(2), pageWidth - 55, y);
+    const desc = isAr ? `رسوم الإقامة — ${invoice.room_type}` : `Stay Charges - ${invoice.room_type}`;
+    doc.text(desc, leftX, y, { align: leftAlign });
+    doc.setFont(ff, 'bold');
+    doc.text(invoice.subtotal.toFixed(2), rightX, y, { align: rightAlign });
     y += 10;
   }
 
   y += 4;
   doc.setDrawColor(230);
-  doc.line(20, y, pageWidth - 20, y);
+  doc.line(margin, y, pw - margin, y);
   y += 12;
 
-  // Grand Total (no VAT on guest invoices)
+  // ---- Grand Total ----
   doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(ff, 'bold');
   doc.setTextColor(1, 31, 54);
-  doc.text('Grand Total', 20, y);
+  doc.text(isAr ? 'الإجمالي' : 'Grand Total', leftX, y, { align: leftAlign });
   doc.setTextColor(212, 175, 55);
-  doc.text(`OMR ${invoice.total_amount.toFixed(2)}`, pageWidth - 55, y);
+  const totalStr = isAr ? `${invoice.total_amount.toFixed(2)} ر.ع.` : `OMR ${invoice.total_amount.toFixed(2)}`;
+  doc.text(totalStr, rightX, y, { align: rightAlign });
 
-  // Footer
+  // ---- Footer ----
   y = doc.internal.pageSize.getHeight() - 20;
   doc.setFontSize(7);
   doc.setTextColor(180);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This is a computer-generated invoice.', pageWidth / 2, y, { align: 'center' });
+  doc.setFont(ff, 'normal');
+  const footerText = isAr
+    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه فاتورة صادرة آليًا.'
+    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This is a computer-generated invoice.';
+  doc.text(footerText, pw / 2, y, { align: 'center' });
 
   return doc;
 }
 
-export function downloadInvoicePDF(invoice: InvoiceData) {
-  const doc = generateInvoicePDF(invoice);
+export async function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
+  const doc = await generateInvoicePDF(invoice, lang);
   doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
 }
 
-export function downloadTermsPDF(termsText: string) {
+// ---------------------------------------------------------------------------
+// Terms of Stay PDF
+// ---------------------------------------------------------------------------
+
+export async function downloadTermsPDF(termsText: string, lang = 'en') {
   const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
   const margin = 20;
-  const maxWidth = pageWidth - margin * 2;
+  const maxWidth = pw - margin * 2;
+  const isAr = lang === 'ar';
+
+  if (isAr) await registerArabicFont(doc);
+
+  const ff = fontFamily(lang);
   let y = 20;
 
-  // Header
+  const headerX = xPos(margin, pw, lang);
+  const headerAlign = align('left', lang);
+
+  // ---- Header ----
   doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(ff, 'bold');
   doc.setTextColor(1, 31, 54);
-  doc.text('AL-NAKHEEL LUXURY PROPERTIES', margin, y);
+  doc.text(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', headerX, y, { align: headerAlign });
   y += 8;
+
   doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(ff, 'normal');
   doc.setTextColor(100);
-  doc.text('Muscat, Sultanate of Oman', margin, y);
+  doc.text(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', headerX, y, { align: headerAlign });
   y += 14;
 
   doc.setDrawColor(230);
-  doc.line(margin, y, pageWidth - margin, y);
+  doc.line(margin, y, pw - margin, y);
   y += 12;
 
-  // Title
+  // ---- Title ----
   doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(ff, 'bold');
   doc.setTextColor(1, 31, 54);
-  doc.text('Terms of Stay', margin, y);
+  doc.text(isAr ? 'شروط الإقامة' : 'Terms of Stay', headerX, y, { align: headerAlign });
   y += 8;
+
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, margin, y);
+  doc.setFont(ff, 'normal');
+  const dateLocale = isAr ? 'ar-OM' : 'en-GB';
+  const genLabel = isAr ? 'تاريخ الإصدار: ' : 'Generated: ';
+  doc.text(genLabel + new Date().toLocaleDateString(dateLocale, { day: 'numeric', month: 'long', year: 'numeric' }), headerX, y, { align: headerAlign });
   y += 12;
 
   doc.setDrawColor(230);
-  doc.line(margin, y, pageWidth - margin, y);
+  doc.line(margin, y, pw - margin, y);
   y += 10;
 
-  // Terms body — wrap text and handle page breaks
+  // ---- Body ----
   doc.setFontSize(10);
   doc.setTextColor(40);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(ff, 'normal');
 
   const lines = doc.splitTextToSize(termsText, maxWidth);
   const lineHeight = 5.5;
+  const textAlign = align('left', lang);
+  const textX = xPos(margin, pw, lang);
 
   for (const line of lines) {
-    if (y + lineHeight > pageHeight - 25) {
+    if (y + lineHeight > ph - 25) {
       doc.addPage();
       y = 20;
     }
-    doc.text(line, margin, y);
+    doc.text(line, textX, y, { align: textAlign });
     y += lineHeight;
   }
 
-  // Footer on last page
-  y = pageHeight - 20;
+  // ---- Footer ----
+  y = ph - 20;
   doc.setFontSize(7);
   doc.setTextColor(180);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.', pageWidth / 2, y, { align: 'center' });
+  doc.setFont(ff, 'normal');
+  const footerText = isAr
+    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
+    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.';
+  doc.text(footerText, pw / 2, y, { align: 'center' });
 
-  doc.save('Al-Nakheel-Terms-of-Stay.pdf');
+  doc.save(isAr ? 'النخيل-شروط-الإقامة.pdf' : 'Al-Nakheel-Terms-of-Stay.pdf');
 }

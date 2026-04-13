@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const state = location.state as { booking?: any; propertyName?: string } | null;
 
   const booking = state?.booking;
@@ -51,8 +51,10 @@ export const Confirmation: React.FC = () => {
     ? (booking.slot_name ? `${booking.slot_name} — ${propertyName}` : `Day Use — ${propertyName}`)
     : `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`;
 
-  const handleViewInvoice = () => {
-    const doc = generateInvoicePDF({
+  const handleViewInvoice = async () => {
+    const lang = i18n.language;
+    const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
+    const pdfDoc = await generateInvoicePDF({
       id: booking.id,
       guest_name: booking.guest_name,
       room_type: propertyName,
@@ -62,10 +64,10 @@ export const Confirmation: React.FC = () => {
       total_amount: grandTotal,
       items: [
         { description: stayLabel, amount: stayTotal },
-        ...(deposit > 0 ? [{ description: 'Refundable Security Deposit', amount: deposit }] : []),
+        ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
       ],
-    });
-    const blobUrl = doc.output('bloburl');
+    }, lang);
+    const blobUrl = pdfDoc.output('bloburl');
     window.open(blobUrl as string, '_blank');
   };
 
