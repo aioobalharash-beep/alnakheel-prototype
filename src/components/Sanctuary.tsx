@@ -5,6 +5,7 @@ import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, Messag
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
+import { bl, type BilingualField } from '../utils/bilingual';
 
 interface PricingSettings {
   sunday_rate?: number;
@@ -21,13 +22,14 @@ interface PricingSettings {
 }
 
 interface PropertyDetails {
-  name: string;
+  name: string | BilingualField;
   capacity: number;
   area_sqm: number;
   nightly_rate: number;
-  headline: string;
-  description: string;
+  headline: string | BilingualField;
+  description: string | BilingualField;
   features: string[];
+  features_ar?: string[];
   gallery: { url: string; label: string }[];
   pricing?: PricingSettings;
 }
@@ -49,7 +51,8 @@ const DEFAULTS: PropertyDetails = {
 
 export const Sanctuary: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [data, setData] = useState<PropertyDetails>(DEFAULTS);
   const [loading, setLoading] = useState(true);
 
@@ -102,7 +105,7 @@ export const Sanctuary: React.FC = () => {
         <div className="flex justify-between items-end mb-6">
           <div>
             <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase block mb-1">{t('sanctuary.estatePreview')}</span>
-            <h2 className="font-headline text-3xl font-bold text-primary-navy">{data.name}</h2>
+            <h2 className="font-headline text-3xl font-bold text-primary-navy">{bl(data.name, lang)}</h2>
           </div>
         </div>
 
@@ -145,8 +148,8 @@ export const Sanctuary: React.FC = () => {
 
       {/* Description */}
       <section className="px-6">
-        <h3 className="font-headline text-xl font-bold mb-4">{data.headline}</h3>
-        <p className="text-primary-navy/60 leading-relaxed text-sm">{data.description}</p>
+        <h3 className="font-headline text-xl font-bold mb-4">{bl(data.headline, lang)}</h3>
+        <p className="text-primary-navy/60 leading-relaxed text-sm">{bl(data.description, lang)}</p>
         <div className="mt-4 text-sm text-primary-navy/60">
           <span className="font-bold text-secondary-gold">{t('sanctuary.from')} {(() => {
             const p = data.pricing;
@@ -173,10 +176,12 @@ export const Sanctuary: React.FC = () => {
         </div>
         {data.features.length > 0 && (
           <div className="mt-8 grid grid-cols-2 gap-y-4">
-            {data.features.map(item => (
+            {data.features.map((item, idx) => (
               <div key={item} className="flex items-center gap-3">
                 <CheckCircle2 className="text-secondary-gold" size={16} />
-                <span className="text-xs font-bold text-primary-navy/80">{item}</span>
+                <span className="text-xs font-bold text-primary-navy/80">
+                  {lang === 'ar' && data.features_ar?.[idx] ? data.features_ar[idx] : item}
+                </span>
               </div>
             ))}
           </div>
@@ -185,7 +190,7 @@ export const Sanctuary: React.FC = () => {
 
       {/* Footer Info */}
       <footer className="w-full py-12 px-8 bg-white border-t border-primary-navy/5 flex flex-col items-center gap-6">
-        <div className="text-secondary-gold font-bold font-headline text-xl">{data.name}</div>
+        <div className="text-secondary-gold font-bold font-headline text-xl">{bl(data.name, lang)}</div>
         <p className="text-xs text-center text-primary-navy/60 leading-relaxed max-w-xs">
           {t('sanctuary.footerDesc')}
         </p>

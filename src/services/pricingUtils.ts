@@ -1,6 +1,7 @@
 export interface DayUseSlot {
   id: string;
   name: string;
+  name_ar?: string;
   start_time: string;  // HH:MM
   end_time: string;    // HH:MM
   sunday_rate: number;

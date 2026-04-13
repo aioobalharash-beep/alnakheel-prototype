@@ -11,10 +11,12 @@ import { db } from '../services/firebase';
 import { calculateTotalPrice, formatBreakdown, migratePricing, formatTime, getSlotRateForDay, type PricingSettings, type PriceBreakdown, type DayUseSlot } from '../services/pricingUtils';
 import type { Property } from '../types';
 import { useTranslation } from 'react-i18next';
+import { bl } from '../utils/bilingual';
 
 export const Booking: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +62,8 @@ export const Booking: React.FC = () => {
   const [thawaniSimulating, setThawaniSimulating] = useState(false);
 
   // Terms of Stay
-  const [termsOfStay, setTermsOfStay] = useState('');
+  const [termsOfStayRaw, setTermsOfStayRaw] = useState<any>('');
+  const termsOfStay = typeof termsOfStayRaw === 'string' ? termsOfStayRaw : bl(termsOfStayRaw, lang);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsNudge, setTermsNudge] = useState(false);
@@ -140,7 +143,7 @@ export const Booking: React.FC = () => {
             }));
           }
           if (data.termsOfStay) {
-            setTermsOfStay(data.termsOfStay);
+            setTermsOfStayRaw(data.termsOfStay);
           }
         }
       })
@@ -673,7 +676,7 @@ export const Booking: React.FC = () => {
                   )}
                 >
                   <div>
-                    <p className="text-sm font-bold text-primary-navy">{slot.name}</p>
+                    <p className="text-sm font-bold text-primary-navy">{lang === 'ar' && slot.name_ar ? slot.name_ar : slot.name}</p>
                     <p className="text-[10px] text-primary-navy/50 font-medium">{formatTime(slot.start_time)} – {formatTime(slot.end_time)}</p>
                   </div>
                   <div className="flex items-center gap-2">
