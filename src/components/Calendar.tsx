@@ -30,7 +30,8 @@ interface RealtimeBooking {
 
 export const Calendar: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +45,7 @@ export const Calendar: React.FC = () => {
 
   const daysInMonth = getDaysInMonth(currentMonth, currentYear);
   const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
-  const monthName = new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthName = new Date(currentYear, currentMonth).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', { month: 'long', year: 'numeric' });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -186,8 +187,8 @@ export const Calendar: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-7 gap-y-4 text-center">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-            <div key={d} className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-tighter">{d}</div>
+          {['daysSun', 'daysMon', 'daysTue', 'daysWed', 'daysThu', 'daysFri', 'daysSat'].map(d => (
+            <div key={d} className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-tighter">{t(`booking.${d}`)}</div>
           ))}
           {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -297,15 +298,15 @@ export const Calendar: React.FC = () => {
                     {arrival.property_name} &bull; {arrival.slot_name
                       ? `${arrival.slot_name}: ${formatTime(arrival.slot_start_time!)} – ${formatTime(arrival.slot_end_time!)}`
                       : arrival.check_in === arrival.check_out
-                        ? 'Day Use'
-                        : `${new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} - ${new Date(arrival.check_out).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}`}
+                        ? t('common.dayUse')
+                        : `${new Date(arrival.check_in).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric' })} - ${new Date(arrival.check_out).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric' })}`}
                   </p>
                 </div>
               </div>
               <div className="text-right flex items-center gap-2">
                 <div className="flex flex-col items-end gap-1">
                   <p className="text-[10px] font-bold text-secondary-gold uppercase">
-                    {new Date(arrival.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
+                    {new Date(arrival.check_in).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric' })}
                   </p>
                   <span className={cn(
                     "text-[9px] font-bold uppercase px-2 py-0.5 rounded-full",

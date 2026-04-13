@@ -150,7 +150,21 @@
     "grandTotal": "المجموع الكلي",
     "selectedRange": "النطاق المحدد يتضمن تواريخ غير متاحة",
     "stay": "الإقامة",
-    "refundable": "قابل للاسترداد عند المغادرة"
+    "refundable": "قابل للاسترداد عند المغادرة",
+    "legendBooked": "محجوز",
+    "legendSelected": "مختار",
+    "slot": "فترة",
+    "selectSlotBelow": "استخدام نهاري — اختر فترة زمنية أدناه",
+    "special": "خاص",
+    "discount": "خصم",
+    "daysSun": "أحد",
+    "daysMon": "إثن",
+    "daysTue": "ثلا",
+    "daysWed": "أربع",
+    "daysThu": "خمي",
+    "daysFri": "جمع",
+    "daysSat": "سبت",
+    "tapAgainDayUse": "انقر مرة أخرى للاستخدام النهاري، أو اختر تاريخ المغادرة"
   },
   "sanctuary": {
     "estatePreview": "معاينة العقار",

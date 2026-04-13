@@ -150,7 +150,21 @@
     "grandTotal": "Grand Total",
     "selectedRange": "Selected range includes unavailable dates",
     "stay": "Stay",
-    "refundable": "Refundable upon check-out"
+    "refundable": "Refundable upon check-out",
+    "legendBooked": "Booked",
+    "legendSelected": "Selected",
+    "slot": "Slot",
+    "selectSlotBelow": "Day Use — select a time slot below",
+    "special": "Special",
+    "discount": "Discount",
+    "daysSun": "Sun",
+    "daysMon": "Mon",
+    "daysTue": "Tue",
+    "daysWed": "Wed",
+    "daysThu": "Thu",
+    "daysFri": "Fri",
+    "daysSat": "Sat",
+    "tapAgainDayUse": "Tap again for Day Use, or select check-out date"
   },
   "sanctuary": {
     "estatePreview": "Estate Preview",

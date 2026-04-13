@@ -155,7 +155,8 @@ export const Booking: React.FC = () => {
 
   const daysInMonth = getDaysInMonth(currentMonth, currentYear);
   const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
-  const monthName = new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const dateLocale = lang === 'ar' ? 'ar-OM' : 'en-US';
+  const monthName = new Date(currentYear, currentMonth).toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -587,7 +588,7 @@ export const Booking: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-7 gap-y-4 text-center text-[10px] font-bold text-primary-navy/30 uppercase tracking-tighter mb-4">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
+          {['daysSun', 'daysMon', 'daysTue', 'daysWed', 'daysThu', 'daysFri', 'daysSat'].map(d => <div key={d}>{t(`booking.${d}`)}</div>)}
         </div>
 
         <div className="grid grid-cols-7 gap-y-2 text-center text-sm font-medium">
@@ -626,11 +627,11 @@ export const Booking: React.FC = () => {
         <div className="mt-4 flex items-center gap-4 justify-center">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-red-50 border border-red-200"></span>
-            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Booked</span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">{t('booking.legendBooked')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
-            <span className="text-[9px] font-bold uppercase text-primary-navy/40">Selected</span>
+            <span className="text-[9px] font-bold uppercase text-primary-navy/40">{t('booking.legendSelected')}</span>
           </div>
         </div>
 
@@ -641,12 +642,12 @@ export const Booking: React.FC = () => {
             {selectedDates.end !== null
               ? isDayUse
                 ? selectedSlot
-                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
+                  ? `${selectedDates.start} ${monthName.split(' ')[0]} — ${lang === 'ar' && selectedSlot.name_ar ? selectedSlot.name_ar : selectedSlot.name} (${formatTime(selectedSlot.start_time)} – ${formatTime(selectedSlot.end_time)})`
                   : dayUseSlots.length > 0
-                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use — select a time slot below)`
-                    : `${selectedDates.start} ${monthName.split(' ')[0]} (Day Use)`
-                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} night${nights > 1 ? 's' : ''})`
-              : `Tap again for Day Use, or select check-out date`}
+                    ? `${selectedDates.start} ${monthName.split(' ')[0]} (${t('booking.selectSlotBelow')})`
+                    : `${selectedDates.start} ${monthName.split(' ')[0]} (${t('common.dayUse')})`
+                : `${selectedDates.start} - ${selectedDates.end} ${monthName.split(' ')[0]} (${nights} ${t(nights > 1 ? 'common.nights' : 'common.night')})`
+              : t('booking.tapAgainDayUse')}
           </div>
         )}
       </motion.div>
@@ -712,7 +713,13 @@ export const Booking: React.FC = () => {
                 <p className="text-[10px] text-primary-navy/40 font-medium">{priceBreakdown.slotTime}</p>
               )}
             </div>
-            <span className="font-bold text-primary-navy text-xs">{formatBreakdown(priceBreakdown)}</span>
+            <span className="font-bold text-primary-navy text-xs">
+              {(() => {
+                const bd = { ...priceBreakdown };
+                if (bd.slotName && lang === 'ar' && bd.slotNameAr) bd.slotName = bd.slotNameAr;
+                return formatBreakdown(bd, lang, t);
+              })()}
+            </span>
           </div>
 
           {/* Per-night breakdown */}
@@ -720,8 +727,8 @@ export const Booking: React.FC = () => {
             {priceBreakdown.per_night.map(n => (
               <div key={n.date} className="flex justify-between text-xs">
                 <span className="text-primary-navy/50">
-                  {new Date(n.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  {n.isSpecial && <span className="ms-1 text-secondary-gold font-bold">(Special)</span>}
+                  {new Date(n.date).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {n.isSpecial && <span className="ms-1 text-secondary-gold font-bold">({t('booking.special')})</span>}
                 </span>
                 <span className="font-bold text-primary-navy">{n.rate} {t('common.omr')}</span>
               </div>
@@ -730,7 +737,7 @@ export const Booking: React.FC = () => {
 
           {priceBreakdown.discount_amount > 0 && (
             <div className="flex justify-between text-sm text-emerald-600">
-              <span className="font-medium">Discount</span>
+              <span className="font-medium">{t('booking.discount')}</span>
               <span className="font-bold">-{priceBreakdown.discount_amount} {t('common.omr')}</span>
             </div>
           )}

@@ -44,6 +44,7 @@ export interface PriceBreakdown {
   total: number;
   per_night: { date: string; dayLabel: string; rate: number; isSpecial: boolean }[];
   slotName?: string;
+  slotNameAr?: string;
   slotTime?: string;
 }
 
@@ -138,6 +139,7 @@ export function calculateTotalPrice(
           total: Math.max(0, rate - discountAmount),
           per_night: [{ date: dateStr, dayLabel, rate, isSpecial }],
           slotName: slot.name,
+          slotNameAr: slot.name_ar,
           slotTime: `${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`,
         };
       }
@@ -220,8 +222,20 @@ export function calculateTotalPrice(
 }
 
 /** Build a human-readable breakdown string */
-export function formatBreakdown(b: PriceBreakdown): string {
-  if (b.isDayUse) return b.slotName ? `${b.slotName} Slot` : 'Day Use';
+export function formatBreakdown(
+  b: PriceBreakdown,
+  lang = 'en',
+  t?: (key: string) => string
+): string {
+  if (b.isDayUse) {
+    const label = b.slotName
+      ? `${b.slotName} ${t ? t('booking.slot') : 'Slot'}`
+      : (t ? t('common.dayUse') : 'Day Use');
+    return label;
+  }
+  if (lang === 'ar') {
+    return `${b.nights} ${t ? t(b.nights > 1 ? 'common.nights' : 'common.night') : (b.nights > 1 ? 'ليالٍ' : 'ليلة')}`;
+  }
   return `${b.nights} Night${b.nights > 1 ? 's' : ''}`;
 }
 
