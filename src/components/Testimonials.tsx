@@ -4,6 +4,7 @@ import { Star, Send, ArrowLeft, MessageSquare } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { testimonialsApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 interface Testimonial {
   id?: string;
@@ -18,6 +19,7 @@ interface Testimonial {
 
 export const Testimonials: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -35,7 +37,7 @@ export const Testimonials: React.FC = () => {
 
   useEffect(() => {
     testimonialsApi.list()
-      .then(t => setTestimonials(t))
+      .then(data => setTestimonials(data))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -74,12 +76,12 @@ export const Testimonials: React.FC = () => {
         className="flex items-center gap-2 text-primary-navy/60 hover:text-primary-navy transition-colors text-sm font-medium"
       >
         <ArrowLeft size={18} />
-        Back to Home
+        {t('login.backToHome')}
       </button>
 
       <section className="text-center space-y-2">
-        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Guest Reviews</span>
-        <h2 className="font-headline text-4xl font-bold text-primary-navy">Share Your Experience</h2>
+        <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">{t('testimonials.guestReviews')}</span>
+        <h2 className="font-headline text-4xl font-bold text-primary-navy">{t('testimonials.shareExperience')}</h2>
         <p className="text-primary-navy/60 text-sm max-w-xs mx-auto">
           Your feedback helps us craft the perfect desert retreat experience at Al-Nakheel.
         </p>
@@ -91,7 +93,7 @@ export const Testimonials: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-emerald-50 text-emerald-700 p-4 rounded-xl text-sm font-medium text-center"
         >
-          Thank you for your review! Your feedback means the world to us.
+          {t('testimonials.reviewSubmitted')}
         </motion.div>
       )}
 
@@ -101,7 +103,7 @@ export const Testimonials: React.FC = () => {
           className="w-full bg-primary-navy text-white py-4 rounded-[20px] font-bold text-sm uppercase tracking-widest shadow-xl shadow-primary-navy/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
           <MessageSquare size={18} />
-          Write a Review
+          {t('testimonials.writeReview')}
         </button>
       ) : (
         <motion.div
@@ -110,7 +112,7 @@ export const Testimonials: React.FC = () => {
           className="bg-white rounded-[24px] p-6 shadow-sm border border-primary-navy/5 space-y-5"
         >
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Your Name *</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('testimonials.yourName')} *</label>
             <input
               type="text"
               value={form.guest_name}
@@ -122,7 +124,7 @@ export const Testimonials: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone *</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('testimonials.yourPhone')} *</label>
             <div className="flex gap-2">
               <div className="bg-surface-container-low rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60">+968</div>
               <input
@@ -138,7 +140,7 @@ export const Testimonials: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Stay Period</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('testimonials.stayDetails')}</label>
             <input
               type="text"
               value={form.stay_details}
@@ -149,7 +151,7 @@ export const Testimonials: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Rating *</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('testimonials.tapToRate')} *</label>
             <div className="flex gap-2 py-2">
               {[1, 2, 3, 4, 5].map(star => (
                 <button
@@ -170,7 +172,7 @@ export const Testimonials: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Your Review *</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('testimonials.yourExperience')} *</label>
             <textarea
               value={form.text}
               onChange={(e) => setForm(p => ({ ...p, text: e.target.value }))}
@@ -186,7 +188,7 @@ export const Testimonials: React.FC = () => {
               onClick={() => setShowForm(false)}
               className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleSubmit}
@@ -198,7 +200,7 @@ export const Testimonials: React.FC = () => {
               ) : (
                 <>
                   <Send size={14} />
-                  Submit Review
+                  {t('testimonials.submitReview')}
                 </>
               )}
             </button>
@@ -208,30 +210,30 @@ export const Testimonials: React.FC = () => {
 
       {/* Existing Testimonials */}
       <section className="space-y-4">
-        <h3 className="font-headline text-xl font-bold text-primary-navy">What Our Guests Say</h3>
+        <h3 className="font-headline text-xl font-bold text-primary-navy">{t('testimonials.guestReviews')}</h3>
         {loading ? (
           <div className="space-y-4 animate-pulse">
             {[1, 2].map(i => <div key={i} className="h-40 bg-primary-navy/5 rounded-xl" />)}
           </div>
         ) : testimonials.length === 0 ? (
-          <p className="text-center text-sm text-primary-navy/40 py-8">Be the first to share your experience!</p>
+          <p className="text-center text-sm text-primary-navy/40 py-8">{t('testimonials.noReviews')}</p>
         ) : (
-          testimonials.map((t, i) => (
+          testimonials.map((tm, i) => (
             <motion.div
-              key={t.id || i}
+              key={tm.id || i}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="bg-white p-6 rounded-[20px] border-l-4 border-secondary-gold shadow-sm space-y-3"
+              className="bg-white p-6 rounded-[20px] border-s-4 border-secondary-gold shadow-sm space-y-3"
             >
               <div>
-                <h4 className="text-sm font-bold text-primary-navy">{t.guest_name}</h4>
-                <p className="text-[10px] text-primary-navy/50 font-medium">{t.property_name} {t.stay_details && `\u2022 ${t.stay_details}`}</p>
+                <h4 className="text-sm font-bold text-primary-navy">{tm.guest_name}</h4>
+                <p className="text-[10px] text-primary-navy/50 font-medium">{tm.property_name} {tm.stay_details && `\u2022 ${tm.stay_details}`}</p>
               </div>
-              <p className="text-sm italic text-primary-navy/80 leading-relaxed">"{t.text}"</p>
+              <p className="text-sm italic text-primary-navy/80 leading-relaxed">"{tm.text}"</p>
               <div className="flex text-secondary-gold">
                 {Array.from({ length: 5 }).map((_, j) => (
-                  <Star key={j} size={12} fill={j < t.rating ? 'currentColor' : 'none'} />
+                  <Star key={j} size={12} fill={j < tm.rating ? 'currentColor' : 'none'} />
                 ))}
               </div>
             </motion.div>

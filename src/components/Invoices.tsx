@@ -7,6 +7,7 @@ import { db } from '../services/firebase';
 import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
 import type { Invoice } from '../types';
+import { useTranslation } from 'react-i18next';
 
 interface RealtimeBooking {
   id: string;
@@ -38,6 +39,7 @@ function formatPhone(phone: string): string {
 }
 
 export const Invoices: React.FC = () => {
+  const { t } = useTranslation();
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -172,7 +174,7 @@ export const Invoices: React.FC = () => {
       {/* Page Header */}
       <div>
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Administration</span>
-        <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">Financial Archive</h1>
+        <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">{t('invoices.invoiceCenter')}</h1>
         <p className="text-primary-navy/50 text-xs font-medium mt-1">{nonCancelledBookings.length} total invoices generated</p>
       </div>
 
@@ -189,8 +191,8 @@ export const Invoices: React.FC = () => {
             <span className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Guest</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Booking ID</span>
             <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Date</span>
-            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Amount</span>
-            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Actions</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-end">Amount</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-end">Actions</span>
           </div>
 
           {nonCancelledBookings.length === 0 ? (
@@ -237,11 +239,11 @@ export const Invoices: React.FC = () => {
                   </div>
 
                   {/* Amount — bold, right-aligned */}
-                  <div className="col-span-2 text-right">
+                  <div className="col-span-2 text-end">
                     <span className="font-bold text-primary-navy font-headline text-sm">
                       {(Number(b.grandTotal) || Number(b.total_amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
+                    <span className="text-[10px] text-primary-navy/40 ms-1">{t('common.omr')}</span>
                   </div>
 
                   {/* Actions — icon-only buttons */}
@@ -377,7 +379,7 @@ export const Invoices: React.FC = () => {
                     <p className="font-bold text-primary-navy">{selectedInvoice.guest_name}</p>
                     <p className="text-xs text-primary-navy/50 font-medium">{selectedInvoice.room_type}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-end">
                     <p className="text-[10px] text-primary-navy/40 uppercase font-bold mb-1 tracking-wider">Issue Date</p>
                     <p className="font-bold text-primary-navy">{new Date(selectedInvoice.issued_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   </div>
@@ -386,20 +388,20 @@ export const Invoices: React.FC = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="text-[10px] uppercase font-bold text-primary-navy/40 border-b border-primary-navy/5">
-                      <th className="text-left py-3 font-bold">Description</th>
-                      <th className="text-right py-3 font-bold">Amount</th>
+                      <th className="text-start py-3 font-bold">Description</th>
+                      <th className="text-end py-3 font-bold">Amount</th>
                     </tr>
                   </thead>
                   <tbody className="text-primary-navy">
                     {selectedInvoice.items?.map((item, i) => (
                       <tr key={i}>
                         <td className="py-3 font-medium">{item.description}</td>
-                        <td className="text-right font-headline font-bold">OMR {item.amount.toFixed(2)}</td>
+                        <td className="text-end font-headline font-bold">OMR {item.amount.toFixed(2)}</td>
                       </tr>
                     ))}
                     <tr className="border-t border-primary-navy/5">
                       <td className="py-4 font-bold text-base">Grand Total</td>
-                      <td className="py-4 text-right font-headline text-xl text-secondary-gold font-bold">OMR {selectedInvoice.total_amount.toFixed(2)}</td>
+                      <td className="py-4 text-end font-headline text-xl text-secondary-gold font-bold">OMR {selectedInvoice.total_amount.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>

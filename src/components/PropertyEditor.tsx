@@ -223,7 +223,7 @@ export const PropertyEditor: React.FC = () => {
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
                 <button onClick={() => removeImage(i)} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow-lg"><X size={14} className="text-red-500" /></button>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3">
                 <p className="text-white text-xs font-bold truncate">{img.label}</p>
               </div>
             </div>

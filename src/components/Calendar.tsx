@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
+import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
@@ -29,6 +30,7 @@ interface RealtimeBooking {
 
 export const Calendar: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +137,7 @@ export const Calendar: React.FC = () => {
         >
           <CalendarIcon className="text-secondary-gold" size={24} />
           <div>
-            <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">Confirmed</p>
+            <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{t('common.confirmed')}</p>
             <p className="font-headline text-2xl font-bold">{confirmedCount}</p>
           </div>
         </motion.div>
@@ -147,7 +149,7 @@ export const Calendar: React.FC = () => {
         >
           <CalendarIcon className="text-amber-600" size={24} />
           <div>
-            <p className="text-amber-700/60 text-[10px] font-bold uppercase tracking-widest">Pending</p>
+            <p className="text-amber-700/60 text-[10px] font-bold uppercase tracking-widest">{t('common.pending')}</p>
             <p className="text-amber-800 font-headline text-2xl font-bold">{pendingCount}</p>
           </div>
         </motion.div>
@@ -159,7 +161,7 @@ export const Calendar: React.FC = () => {
         >
           <Banknote className="text-primary-navy" size={24} />
           <div>
-            <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">Revenue</p>
+            <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">{t('calendar.revenue')}</p>
             <p className="text-primary-navy font-headline text-2xl font-bold">
               {(totalRevenue / 1000).toFixed(1)}k <span className="text-xs">OMR</span>
             </p>
@@ -175,7 +177,7 @@ export const Calendar: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="font-headline text-xl font-bold text-primary-navy">{monthName}</h2>
-            <p className="text-xs text-primary-navy/40 font-medium">{bookings.length} Total bookings</p>
+            <p className="text-xs text-primary-navy/40 font-medium">{bookings.length} {t('calendar.totalBookings')}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={prevMonth} className="p-2 rounded-full hover:bg-primary-navy/5 transition-colors"><ChevronLeft size={20} /></button>
@@ -216,7 +218,7 @@ export const Calendar: React.FC = () => {
               >
                 {day}
                 {isDayUseDay && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-secondary-gold text-primary-navy rounded-full text-[7px] font-bold flex items-center justify-center leading-none">D</span>
+                  <span className="absolute -top-1 -end-1 w-3.5 h-3.5 bg-secondary-gold text-primary-navy rounded-full text-[7px] font-bold flex items-center justify-center leading-none">D</span>
                 )}
                 {dayBookings.length > 0 && (
                   <div className="w-full mt-0.5 space-y-px overflow-hidden">
@@ -252,27 +254,27 @@ export const Calendar: React.FC = () => {
         <div className="mt-6 flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#2E7D32' }}></span>
-            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Confirmed</span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.confirmed')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded" style={{ backgroundColor: '#FFD700' }}></span>
-            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Pending</span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.pending')}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="relative w-3 h-3 rounded bg-secondary-gold"><span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
-            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Day Use</span>
+            <span className="relative w-3 h-3 rounded bg-secondary-gold"><span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.dayUse')}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded bg-primary-navy"></span>
-            <span className="text-[10px] font-bold uppercase text-primary-navy/60">Today</span>
+            <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.today')}</span>
           </div>
         </div>
       </motion.section>
 
       <section className="space-y-4">
         <div className="flex justify-between items-end px-1">
-          <h3 className="font-headline text-lg font-bold text-primary-navy">Next Arrivals</h3>
-          <button onClick={() => navigate('/admin/guests')} className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">View All</button>
+          <h3 className="font-headline text-lg font-bold text-primary-navy">{t('calendar.nextArrivals')}</h3>
+          <button onClick={() => navigate('/admin/guests')} className="text-[10px] font-bold text-secondary-gold tracking-widest uppercase hover:underline">{t('common.viewAll')}</button>
         </div>
         <div className="space-y-3">
           {upcomingArrivals.map((arrival, i) => (
@@ -317,13 +319,13 @@ export const Calendar: React.FC = () => {
             </motion.div>
           ))}
           {upcomingArrivals.length === 0 && (
-            <p className="text-center text-sm text-primary-navy/40 py-8">No upcoming arrivals</p>
+            <p className="text-center text-sm text-primary-navy/40 py-8">{t('calendar.noUpcoming')}</p>
           )}
         </div>
       </section>
 
       <section className="space-y-4">
-        <h3 className="font-headline text-lg font-bold text-primary-navy px-1">Recent Transactions</h3>
+        <h3 className="font-headline text-lg font-bold text-primary-navy px-1">{t('calendar.recentTransactions')}</h3>
         <div className="bg-white rounded-xl overflow-hidden border border-primary-navy/5 shadow-sm">
           {transactions.slice(0, 4).map((tx, i) => (
             <div key={tx.id} className={cn("p-4 flex items-center justify-between", i < transactions.length - 1 && "border-b border-primary-navy/5")}>
@@ -342,7 +344,7 @@ export const Calendar: React.FC = () => {
             </div>
           ))}
           {transactions.length === 0 && (
-            <p className="text-center text-sm text-primary-navy/40 py-8">No transactions yet</p>
+            <p className="text-center text-sm text-primary-navy/40 py-8">{t('calendar.noTransactions')}</p>
           )}
         </div>
       </section>

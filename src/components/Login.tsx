@@ -5,6 +5,8 @@ import { Eye, EyeOff, LogIn, UserPlus, AlertCircle, ArrowLeft, Mail } from 'luci
 import { useAuth } from '../contexts/AuthContext';
 import { sendPasswordResetEmail } from '../services/firebase';
 import { cn } from '@/src/lib/utils';
+import { useTranslation } from 'react-i18next';
+import { LanguageToggle } from './LanguageToggle';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -56,16 +58,23 @@ export const Login: React.FC = () => {
     }
   };
 
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-screen bg-primary-navy flex items-center justify-center p-6">
+      {/* Language toggle */}
+      <div className="fixed top-4 end-4 z-50">
+        <LanguageToggle variant="dark" />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold font-headline text-white tracking-tight">Al-Nakheel</h1>
-          <p className="text-white/40 text-[10px] uppercase tracking-[0.3em] font-bold mt-2">Luxury Desert Sanctuary</p>
+          <h1 className="text-4xl font-bold font-headline text-white tracking-tight">{t('common.alNakheel')}</h1>
+          <p className="text-white/40 text-[10px] uppercase tracking-[0.3em] font-bold mt-2">{t('common.luxuryDesertSanctuary')}</p>
         </div>
 
         <button
@@ -73,7 +82,7 @@ export const Login: React.FC = () => {
           className="flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm font-medium mb-6"
         >
           <ArrowLeft size={18} />
-          Back to Home
+          {t('login.backToHome')}
         </button>
 
         <div className="bg-white rounded-[28px] p-8 shadow-2xl">
@@ -85,7 +94,7 @@ export const Login: React.FC = () => {
                 !isRegister ? "bg-primary-navy text-white shadow" : "text-primary-navy/50"
               )}
             >
-              Sign In
+              {t('login.signIn')}
             </button>
             <button
               onClick={() => { setIsRegister(true); setError(''); }}
@@ -94,7 +103,7 @@ export const Login: React.FC = () => {
                 isRegister ? "bg-primary-navy text-white shadow" : "text-primary-navy/50"
               )}
             >
-              Register
+              {t('login.register')}
             </button>
           </div>
 
@@ -112,7 +121,7 @@ export const Login: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             {isRegister && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Full Name</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('login.fullName')}</label>
                 <input
                   type="text"
                   value={name}
@@ -124,7 +133,7 @@ export const Login: React.FC = () => {
             )}
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Email</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('login.email')}</label>
               <input
                 type="email"
                 value={email}
@@ -136,7 +145,7 @@ export const Login: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Password</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('login.password')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -144,12 +153,12 @@ export const Login: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="w-full bg-pearl-white border-none rounded-xl py-3.5 px-5 pr-12 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm"
+                  className="w-full bg-pearl-white border-none rounded-xl py-3.5 px-5 pe-12 focus:ring-1 focus:ring-secondary-gold/50 placeholder:text-primary-navy/20 text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-navy/30 hover:text-primary-navy/60"
+                  className="absolute end-4 top-1/2 -translate-y-1/2 text-primary-navy/30 hover:text-primary-navy/60"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -165,7 +174,7 @@ export const Login: React.FC = () => {
                     className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600"
                   >
                     <Mail size={12} />
-                    Reset link sent to {email}
+                    {t('login.resetSent')}
                   </motion.p>
                 ) : (
                   <button
@@ -174,7 +183,7 @@ export const Login: React.FC = () => {
                     disabled={resetLoading}
                     className="text-[11px] font-bold text-secondary-gold hover:underline disabled:opacity-50"
                   >
-                    {resetLoading ? 'Sending...' : 'Forgot Password?'}
+                    {resetLoading ? t('common.loading') : t('login.forgotPassword')}
                   </button>
                 )}
               </div>
@@ -182,7 +191,7 @@ export const Login: React.FC = () => {
 
             {isRegister && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Phone (Optional)</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('login.phone')}</label>
                 <div className="flex gap-3">
                   <div className="bg-pearl-white rounded-xl py-3.5 px-4 text-sm font-bold text-primary-navy/60">+968</div>
                   <input
@@ -206,7 +215,7 @@ export const Login: React.FC = () => {
               ) : (
                 <>
                   {isRegister ? <UserPlus size={18} /> : <LogIn size={18} />}
-                  {isRegister ? 'Create Account' : 'Sign In'}
+                  {isRegister ? t('login.register') : t('login.signIn')}
                 </>
               )}
             </button>
@@ -214,7 +223,7 @@ export const Login: React.FC = () => {
 
           {!isRegister && (
             <div className="mt-6 p-4 bg-pearl-white rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-primary-navy/40 mb-2">Demo Credentials</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-primary-navy/40 mb-2">Demo</p>
               <div className="space-y-1 text-xs text-primary-navy/60">
                 <p><span className="font-bold text-primary-navy">Admin:</span> ahmed@alnakheel.om / admin123</p>
                 <p><span className="font-bold text-primary-navy">Client:</span> salim@guest.com / guest123</p>

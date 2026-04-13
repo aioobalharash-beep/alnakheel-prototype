@@ -5,6 +5,7 @@ import { cn } from '@/src/lib/utils';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generatePerformanceReportPDF } from '../services/performanceReport';
+import { useTranslation } from 'react-i18next';
 
 interface RealtimeBooking {
   id: string;
@@ -22,6 +23,7 @@ interface RealtimeBooking {
 }
 
 export const Reports: React.FC = () => {
+  const { t } = useTranslation();
   const [allBookings, setAllBookings] = useState<RealtimeBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,7 +99,7 @@ export const Reports: React.FC = () => {
       {/* Page Header */}
       <div>
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Administration</span>
-        <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">Performance Reports</h1>
+        <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">{t('reports.financialReports')}</h1>
         <p className="text-primary-navy/50 text-xs font-medium mt-1">Generate custom reports for any date range</p>
       </div>
 
@@ -155,10 +157,10 @@ export const Reports: React.FC = () => {
               className="bg-primary-navy p-6 rounded-[20px] text-white shadow-xl shadow-primary-navy/20"
             >
               <Banknote size={20} className="text-secondary-gold mb-3" />
-              <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Total Revenue</p>
+              <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">{t('reports.totalRevenue')}</p>
               <p className="font-headline text-2xl font-bold mt-1">
                 {totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                <span className="text-sm font-normal text-white/60 ml-1">OMR</span>
+                <span className="text-sm font-normal text-white/60 ms-1">{t('common.omr')}</span>
               </p>
             </motion.div>
 
@@ -169,7 +171,7 @@ export const Reports: React.FC = () => {
               className="bg-white p-6 rounded-[20px] border border-primary-navy/5 shadow-sm"
             >
               <TrendingUp size={20} className="text-secondary-gold mb-3" />
-              <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">Total Bookings</p>
+              <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">{t('calendar.totalBookings')}</p>
               <p className="font-headline text-2xl font-bold text-primary-navy mt-1">{totalBookings}</p>
             </motion.div>
 
@@ -182,7 +184,7 @@ export const Reports: React.FC = () => {
               <Moon size={20} className="text-secondary-gold mb-3" />
               <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">Average Stay</p>
               <p className="font-headline text-2xl font-bold text-primary-navy mt-1">
-                {avgStay} <span className="text-sm font-normal text-primary-navy/40">nights</span>
+                {avgStay} <span className="text-sm font-normal text-primary-navy/40">{t('common.nights')}</span>
               </p>
             </motion.div>
           </section>
@@ -233,7 +235,7 @@ export const Reports: React.FC = () => {
                   <span className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Guest</span>
                   <span className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40">Dates</span>
                   <span className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-center">Nights</span>
-                  <span className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-right">Amount</span>
+                  <span className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 text-end">Amount</span>
                 </div>
 
                 {filteredBookings.map((b, i) => (
@@ -257,11 +259,11 @@ export const Reports: React.FC = () => {
                     <div className="col-span-2 text-center">
                       <span className="text-xs font-bold text-primary-navy">{b.nights}</span>
                     </div>
-                    <div className="col-span-3 text-right">
+                    <div className="col-span-3 text-end">
                       <span className="font-bold text-primary-navy font-headline text-sm">
                         {(b.total_amount - (b.security_deposit || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </span>
-                      <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
+                      <span className="text-[10px] text-primary-navy/40 ms-1">{t('common.omr')}</span>
                     </div>
                   </div>
                 ))}
@@ -275,11 +277,11 @@ export const Reports: React.FC = () => {
                   <div className="col-span-2 text-center">
                     <span className="text-xs font-bold text-primary-navy">{totalNights}</span>
                   </div>
-                  <div className="col-span-3 text-right">
+                  <div className="col-span-3 text-end">
                     <span className="font-bold text-secondary-gold font-headline">
                       {totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-primary-navy/40 ml-1">OMR</span>
+                    <span className="text-[10px] text-primary-navy/40 ms-1">{t('common.omr')}</span>
                   </div>
                 </div>
               </div>

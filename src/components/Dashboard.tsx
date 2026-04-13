@@ -5,6 +5,7 @@ import { cn } from '@/src/lib/utils';
 import { dashboardApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
@@ -37,6 +38,7 @@ interface RealtimeBooking {
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -225,8 +227,8 @@ export const Dashboard: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-1"
       >
-        <p className="text-primary-navy/60 font-medium text-sm">Assalamu Alaikum, {data.userName}</p>
-        <h2 className="text-3xl font-bold text-primary-navy">Evening Overview</h2>
+        <p className="text-primary-navy/60 font-medium text-sm">{t('dashboard.greeting')}, {data.userName}</p>
+        <h2 className="text-3xl font-bold text-primary-navy">{t('dashboard.eveningOverview')}</h2>
       </motion.section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -234,10 +236,10 @@ export const Dashboard: React.FC = () => {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
-          className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-secondary-gold"
+          className="bg-white p-6 rounded-2xl shadow-sm border-s-4 border-secondary-gold"
         >
           <div className="flex justify-between items-start mb-2">
-            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">Total Revenue</span>
+            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">{t('dashboard.totalRevenue')}</span>
             <Banknote className="text-secondary-gold" size={20} />
           </div>
           <div className="flex items-baseline gap-2">
@@ -246,7 +248,7 @@ export const Dashboard: React.FC = () => {
               {data.revenue.trend >= 0 ? '+' : ''}{data.revenue.trend}%
             </span>
           </div>
-          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">Last 30 days performance</p>
+          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">{t('dashboard.last30Days')}</p>
         </motion.div>
 
         <motion.div
@@ -256,13 +258,13 @@ export const Dashboard: React.FC = () => {
           className="bg-primary-navy p-6 rounded-2xl shadow-lg text-white"
         >
           <div className="flex justify-between items-start mb-2">
-            <span className="text-white/50 font-bold text-[10px] uppercase tracking-widest">Pending Bookings</span>
+            <span className="text-white/50 font-bold text-[10px] uppercase tracking-widest">{t('dashboard.pendingBookings')}</span>
             <Star className="text-secondary-gold" size={20} fill="currentColor" />
           </div>
           <div className="flex items-baseline gap-3">
             <span className="text-3xl font-bold font-headline">{String(pendingCount).padStart(2, '0')}</span>
             {pendingCount > 0 && (
-              <span className="bg-secondary-gold/20 text-secondary-gold px-2 py-0.5 rounded text-[10px] font-bold uppercase">Action Required</span>
+              <span className="bg-secondary-gold/20 text-secondary-gold px-2 py-0.5 rounded text-[10px] font-bold uppercase">{t('dashboard.actionRequired')}</span>
             )}
           </div>
         </motion.div>
@@ -274,7 +276,7 @@ export const Dashboard: React.FC = () => {
           className="bg-white p-6 rounded-2xl shadow-sm border border-primary-navy/5"
         >
           <div className="flex justify-between items-start mb-3">
-            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">Chalet Availability</span>
+            <span className="text-primary-navy/50 font-bold text-[10px] uppercase tracking-widest">{t('dashboard.chaletAvailability')}</span>
             {statusLoading ? (
               <div className="w-10 h-5 bg-primary-navy/10 rounded-full animate-pulse" />
             ) : (
@@ -282,12 +284,12 @@ export const Dashboard: React.FC = () => {
                 "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full",
                 chaletLive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
               )}>
-                {chaletLive ? 'Live' : 'Maintenance'}
+                {chaletLive ? t('dashboard.live') : t('dashboard.maintenance')}
               </span>
             )}
           </div>
           <p className="text-xs text-primary-navy/50 font-medium mb-4">
-            {chaletLive ? 'Accepting New Bookings' : 'Bookings Paused'}
+            {chaletLive ? t('dashboard.acceptingBookings') : t('dashboard.bookingsPaused')}
           </p>
           {/* Toggle switch */}
           <button
@@ -296,7 +298,7 @@ export const Dashboard: React.FC = () => {
             className="relative w-full flex items-center justify-between gap-3 group disabled:opacity-60"
           >
             <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/60">
-              {chaletLive ? 'Online' : 'Offline'}
+              {chaletLive ? t('dashboard.online') : t('dashboard.offline')}
             </span>
             <div className={cn(
               "relative w-12 h-6 rounded-full transition-colors duration-300",
@@ -363,7 +365,7 @@ export const Dashboard: React.FC = () => {
                 >
                   {day}
                   {isDayUseDay && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-secondary-gold text-primary-navy rounded-full text-[6px] font-bold flex items-center justify-center leading-none">D</span>
+                    <span className="absolute -top-1 -end-1 w-3 h-3 bg-secondary-gold text-primary-navy rounded-full text-[6px] font-bold flex items-center justify-center leading-none">D</span>
                   )}
                   {dayBookings.length > 0 && (
                     <span className="w-full mt-px overflow-hidden flex flex-col items-center">
@@ -399,19 +401,19 @@ export const Dashboard: React.FC = () => {
           <div className="mt-4 flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: '#2E7D32' }}></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Confirmed</span>
+              <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.confirmed')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: '#FFD700' }}></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Pending</span>
+              <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.pending')}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="relative w-2.5 h-2.5 rounded bg-secondary-gold"><span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Day Use</span>
+              <span className="relative w-2.5 h-2.5 rounded bg-secondary-gold"><span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-secondary-gold text-primary-navy rounded-full text-[5px] font-bold flex items-center justify-center leading-none">D</span></span>
+              <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.dayUse')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded bg-primary-navy"></span>
-              <span className="text-[10px] font-bold uppercase text-primary-navy/60">Today</span>
+              <span className="text-[10px] font-bold uppercase text-primary-navy/60">{t('common.today')}</span>
             </div>
           </div>
 
@@ -471,13 +473,13 @@ export const Dashboard: React.FC = () => {
                   <div className="bg-white rounded-2xl border border-primary-navy/5 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                       <Clock size={16} className="text-secondary-gold" />
-                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">Next Check-In</h3>
+                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">{t('dashboard.nextCheckIn')}</h3>
                     </div>
                     <div className="text-center py-6">
                       <div className="w-12 h-12 rounded-full bg-primary-navy/5 mx-auto mb-3 flex items-center justify-center">
                         <User size={20} className="text-primary-navy/30" />
                       </div>
-                      <p className="text-sm text-primary-navy/40 font-medium">No upcoming check-ins</p>
+                      <p className="text-sm text-primary-navy/40 font-medium">{t('dashboard.noUpcomingCheckIns')}</p>
                     </div>
                   </div>
                 );
@@ -491,7 +493,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Clock size={16} className="text-secondary-gold" />
-                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">Next Check-In</h3>
+                      <h3 className="text-sm font-bold font-headline text-primary-navy uppercase tracking-wide">{t('dashboard.nextCheckIn')}</h3>
                     </div>
                     <span className={cn(
                       "text-[9px] font-bold uppercase px-2.5 py-1 rounded-full",
@@ -522,7 +524,7 @@ export const Dashboard: React.FC = () => {
                     onClick={() => navigate(`/admin/guests?highlight=${encodeURIComponent(nextCheckIn.guest_name)}`)}
                     className="mt-4 w-full flex items-center justify-center gap-2 bg-primary-navy text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
                   >
-                    View Details
+                    {t('common.viewDetails')}
                     <ArrowRight size={12} />
                   </button>
                 </div>
@@ -545,13 +547,13 @@ export const Dashboard: React.FC = () => {
                   <div className="bg-primary-navy rounded-2xl p-6 shadow-lg">
                     <div className="flex items-center gap-2 mb-4">
                       <Sparkles size={16} className="text-secondary-gold" />
-                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">Recent Activity</h3>
+                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">{t('dashboard.recentActivity')}</h3>
                     </div>
                     <div className="text-center py-6">
                       <div className="w-12 h-12 rounded-full bg-white/10 mx-auto mb-3 flex items-center justify-center">
                         <Sparkles size={20} className="text-white/30" />
                       </div>
-                      <p className="text-sm text-white/40 font-medium">No recent activity</p>
+                      <p className="text-sm text-white/40 font-medium">{t('dashboard.noRecentActivity')}</p>
                     </div>
                   </div>
                 );
@@ -562,13 +564,13 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Sparkles size={16} className="text-secondary-gold" />
-                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">Recent Activity</h3>
+                      <h3 className="text-sm font-bold font-headline text-white uppercase tracking-wide">{t('dashboard.recentActivity')}</h3>
                     </div>
                     <span className="bg-secondary-gold/20 text-secondary-gold px-2.5 py-1 rounded-full text-[9px] font-bold uppercase">New</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-white text-sm truncate">New Booking from {recentBooking.guest_name}</p>
+                      <p className="font-bold text-white text-sm truncate">{t('dashboard.newBookingFrom')} {recentBooking.guest_name}</p>
                       <p className="text-[11px] text-white/50 font-medium">
                         {recentBooking.property_name} &bull; {recentBooking.slot_name
                           ? `${recentBooking.slot_name}: ${formatTime(recentBooking.slot_start_time!)} – ${formatTime(recentBooking.slot_end_time!)}`
@@ -577,14 +579,14 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between bg-white/5 rounded-xl px-4 py-2.5">
-                    <span className="text-white/50 text-[10px] font-bold uppercase tracking-wider">Amount</span>
+                    <span className="text-white/50 text-[10px] font-bold uppercase tracking-wider">{t('dashboard.amount')}</span>
                     <span className="text-secondary-gold font-bold font-headline">OMR {recentBooking.total_amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <button
                     onClick={() => navigate(`/admin/guests?highlight=${encodeURIComponent(recentBooking.guest_name)}`)}
                     className="mt-3 w-full flex items-center justify-center gap-2 bg-secondary-gold text-primary-navy py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-[0.98] transition-all"
                   >
-                    View Details
+                    {t('common.viewDetails')}
                     <ArrowRight size={12} />
                   </button>
                 </div>
@@ -604,7 +606,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex justify-between items-end px-1">
           <div className="flex items-center gap-2">
             <MessageSquare size={18} className="text-secondary-gold" />
-            <h3 className="font-headline text-lg font-bold text-primary-navy">Recent Testimonials</h3>
+            <h3 className="font-headline text-lg font-bold text-primary-navy">{t('dashboard.recentTestimonials')}</h3>
           </div>
           <span className="text-[10px] font-bold text-primary-navy/40 uppercase tracking-widest">
             {testimonials.length} review{testimonials.length !== 1 ? 's' : ''}
@@ -616,67 +618,67 @@ export const Dashboard: React.FC = () => {
             <div className="w-12 h-12 rounded-full bg-primary-navy/5 mx-auto mb-3 flex items-center justify-center">
               <MessageSquare size={20} className="text-primary-navy/30" />
             </div>
-            <p className="text-sm text-primary-navy/40 font-medium">No testimonials yet</p>
+            <p className="text-sm text-primary-navy/40 font-medium">{t('dashboard.noTestimonials')}</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {testimonials.map((t) => (
+            {testimonials.map((tm) => (
               <div
-                key={t.id}
+                key={tm.id}
                 className={cn(
                   "bg-white rounded-xl p-5 shadow-sm border transition-all",
-                  t.isPinned ? "border-secondary-gold/40 bg-secondary-gold/[0.03]" : "border-primary-navy/5"
+                  tm.isPinned ? "border-secondary-gold/40 bg-secondary-gold/[0.03]" : "border-primary-navy/5"
                 )}
               >
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-primary-navy">{t.guest_name}</p>
+                    <p className="font-bold text-sm text-primary-navy">{tm.guest_name}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => (
                           <Star
                             key={i}
                             size={11}
-                            className={i < t.rating ? "text-secondary-gold fill-secondary-gold" : "text-primary-navy/15"}
+                            className={i < tm.rating ? "text-secondary-gold fill-secondary-gold" : "text-primary-navy/15"}
                           />
                         ))}
                       </div>
-                      {t.stay_details && (
-                        <span className="text-[10px] text-primary-navy/40 font-medium">&bull; {t.stay_details}</span>
+                      {tm.stay_details && (
+                        <span className="text-[10px] text-primary-navy/40 font-medium">&bull; {tm.stay_details}</span>
                       )}
                     </div>
                   </div>
-                  {t.isPinned && (
+                  {tm.isPinned && (
                     <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-secondary-gold/10 text-secondary-gold flex-shrink-0">
-                      Public
+                      {t('dashboard.public')}
                     </span>
                   )}
                 </div>
 
-                <p className="text-xs text-primary-navy/60 leading-relaxed mb-3 line-clamp-3">{t.text}</p>
+                <p className="text-xs text-primary-navy/60 leading-relaxed mb-3 line-clamp-3">{tm.text}</p>
 
                 <div className="flex items-center gap-2 pt-3 border-t border-primary-navy/5">
                   <button
-                    onClick={() => handleToggleTestimonialPin(t.id, t.isPinned)}
+                    onClick={() => handleToggleTestimonialPin(tm.id, tm.isPinned)}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all active:scale-95",
-                      t.isPinned
+                      tm.isPinned
                         ? "bg-secondary-gold/10 text-secondary-gold border border-secondary-gold/30"
                         : "bg-primary-navy/5 text-primary-navy/50 hover:text-primary-navy/70 hover:bg-primary-navy/10"
                     )}
                   >
-                    <Pin size={11} className={t.isPinned ? "fill-current" : ""} />
-                    {t.isPinned ? 'Unpin' : 'Pin to Public'}
+                    <Pin size={11} className={tm.isPinned ? "fill-current" : ""} />
+                    {tm.isPinned ? t('dashboard.unpin') : t('dashboard.pinToPublic')}
                   </button>
                   <button
-                    onClick={() => setDeleteTarget(t.id)}
+                    onClick={() => setDeleteTarget(tm.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-95"
                   >
                     <Trash2 size={11} />
-                    Remove
+                    {t('dashboard.remove')}
                   </button>
-                  <span className="ml-auto text-[10px] text-primary-navy/30 font-medium">
-                    {new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  <span className="ms-auto text-[10px] text-primary-navy/30 font-medium">
+                    {new Date(tm.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
               </div>
@@ -699,9 +701,9 @@ export const Dashboard: React.FC = () => {
                 <Trash2 size={28} className="text-red-500" />
               </div>
               <div className="space-y-2">
-                <h3 className="font-headline text-lg font-bold text-primary-navy">Remove Testimonial?</h3>
+                <h3 className="font-headline text-lg font-bold text-primary-navy">{t('dashboard.removeTestimonial')}</h3>
                 <p className="text-sm text-primary-navy/50">
-                  Are you sure? This review will be permanently deleted and removed from the public page.
+                  {t('dashboard.removeTestimonialDesc')}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -709,7 +711,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setDeleteTarget(null)}
                   className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy active:scale-[0.98] transition-all"
                 >
-                  Keep
+                  {t('dashboard.keep')}
                 </button>
                 <button
                   onClick={handleDeleteTestimonial}
@@ -719,7 +721,7 @@ export const Dashboard: React.FC = () => {
                   {deleting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    'Yes, Remove'
+                    t('dashboard.yesRemove')
                   )}
                 </button>
               </div>
