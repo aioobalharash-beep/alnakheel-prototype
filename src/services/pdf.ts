@@ -16,8 +16,8 @@ interface InvoiceData {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Font family — always IBMPlexArabic (supports Latin + Arabic glyphs) */
-const FF = 'IBMPlexArabic';
+/** Font family — always Cairo (supports Latin + Arabic glyphs) */
+const FF = 'Cairo';
 
 /** Text alignment shorthand — flips for RTL */
 function align(side: 'left' | 'right', lang: string): 'left' | 'right' {
@@ -34,14 +34,18 @@ function xPos(x: number, pageWidth: number, lang: string): number {
 // Invoice PDF
 // ---------------------------------------------------------------------------
 
-export async function generateInvoicePDF(invoice: InvoiceData, lang = 'en'): Promise<jsPDF> {
+export function generateInvoicePDF(invoice: InvoiceData, lang = 'en'): jsPDF {
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
   const margin = 20;
   const isAr = lang === 'ar';
 
-  // Always load the Arabic-capable font so Arabic guest names render in any language
-  await registerArabicFont(doc);
+  // Register embedded Cairo font (synchronous, no network dependency)
+  registerArabicFont(doc);
+
+  if (isAr) {
+    doc.setR2L(true);
+  }
 
   let y = 20;
 
@@ -182,95 +186,109 @@ export async function generateInvoicePDF(invoice: InvoiceData, lang = 'en'): Pro
   return doc;
 }
 
-export async function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
-  const doc = await generateInvoicePDF(invoice, lang);
-  doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
+export function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
+  try {
+    const doc = generateInvoicePDF(invoice, lang);
+    doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
+  } catch (err) {
+    console.error('[PDF] Failed to download invoice PDF:', err);
+    alert(lang === 'ar' ? 'حدث خطأ أثناء إنشاء الفاتورة. يرجى المحاولة مرة أخرى.' : 'Failed to generate invoice. Please try again.');
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Terms of Stay PDF
 // ---------------------------------------------------------------------------
 
-export async function downloadTermsPDF(termsText: string, lang = 'en') {
-  const doc = new jsPDF();
-  const pw = doc.internal.pageSize.getWidth();
-  const ph = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const maxWidth = pw - margin * 2;
-  const isAr = lang === 'ar';
+export function downloadTermsPDF(termsText: string, lang = 'en') {
+  try {
+    const doc = new jsPDF();
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pw - margin * 2;
+    const isAr = lang === 'ar';
 
-  // Always load the Arabic-capable font so mixed text renders correctly
-  await registerArabicFont(doc);
+    // Register embedded Cairo font (synchronous)
+    registerArabicFont(doc);
 
-  let y = 20;
-
-  const headerX = xPos(margin, pw, lang);
-  const headerAlign = align('left', lang);
-
-  // ---- Header ----
-  doc.setFontSize(22);
-  doc.setFont(FF, 'bold');
-  doc.setTextColor(1, 31, 54);
-  doc.text(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', headerX, y, { align: headerAlign });
-  y += 8;
-
-  doc.setFontSize(9);
-  doc.setFont(FF, 'normal');
-  doc.setTextColor(100);
-  doc.text(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', headerX, y, { align: headerAlign });
-  y += 14;
-
-  doc.setDrawColor(230);
-  doc.line(margin, y, pw - margin, y);
-  y += 12;
-
-  // ---- Title ----
-  doc.setFontSize(16);
-  doc.setFont(FF, 'bold');
-  doc.setTextColor(1, 31, 54);
-  doc.text(isAr ? 'شروط الإقامة' : 'Terms of Stay', headerX, y, { align: headerAlign });
-  y += 8;
-
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.setFont(FF, 'normal');
-  const dateLocale = isAr ? 'ar-OM' : 'en-GB';
-  const genLabel = isAr ? 'تاريخ الإصدار: ' : 'Generated: ';
-  doc.text(genLabel + new Date().toLocaleDateString(dateLocale, { day: 'numeric', month: 'long', year: 'numeric' }), headerX, y, { align: headerAlign });
-  y += 12;
-
-  doc.setDrawColor(230);
-  doc.line(margin, y, pw - margin, y);
-  y += 10;
-
-  // ---- Body ----
-  doc.setFontSize(10);
-  doc.setTextColor(40);
-  doc.setFont(FF, 'normal');
-
-  const lines = doc.splitTextToSize(termsText, maxWidth);
-  const lineHeight = 5.5;
-  const textAlign = align('left', lang);
-  const textX = xPos(margin, pw, lang);
-
-  for (const line of lines) {
-    if (y + lineHeight > ph - 25) {
-      doc.addPage();
-      y = 20;
+    if (isAr) {
+      doc.setR2L(true);
     }
-    doc.text(line, textX, y, { align: textAlign });
-    y += lineHeight;
+
+    let y = 20;
+
+    const headerX = xPos(margin, pw, lang);
+    const headerAlign = align('left', lang);
+
+    // ---- Header ----
+    doc.setFontSize(22);
+    doc.setFont(FF, 'bold');
+    doc.setTextColor(1, 31, 54);
+    doc.text(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', headerX, y, { align: headerAlign });
+    y += 8;
+
+    doc.setFontSize(9);
+    doc.setFont(FF, 'normal');
+    doc.setTextColor(100);
+    doc.text(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', headerX, y, { align: headerAlign });
+    y += 14;
+
+    doc.setDrawColor(230);
+    doc.line(margin, y, pw - margin, y);
+    y += 12;
+
+    // ---- Title ----
+    doc.setFontSize(16);
+    doc.setFont(FF, 'bold');
+    doc.setTextColor(1, 31, 54);
+    doc.text(isAr ? 'شروط الإقامة' : 'Terms of Stay', headerX, y, { align: headerAlign });
+    y += 8;
+
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.setFont(FF, 'normal');
+    const dateLocale = isAr ? 'ar-OM' : 'en-GB';
+    const genLabel = isAr ? 'تاريخ الإصدار: ' : 'Generated: ';
+    doc.text(genLabel + new Date().toLocaleDateString(dateLocale, { day: 'numeric', month: 'long', year: 'numeric' }), headerX, y, { align: headerAlign });
+    y += 12;
+
+    doc.setDrawColor(230);
+    doc.line(margin, y, pw - margin, y);
+    y += 10;
+
+    // ---- Body ----
+    doc.setFontSize(10);
+    doc.setTextColor(40);
+    doc.setFont(FF, 'normal');
+
+    const lines = doc.splitTextToSize(termsText, maxWidth);
+    const lineHeight = 5.5;
+    const textAlign = align('left', lang);
+    const textX = xPos(margin, pw, lang);
+
+    for (const line of lines) {
+      if (y + lineHeight > ph - 25) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(line, textX, y, { align: textAlign });
+      y += lineHeight;
+    }
+
+    // ---- Footer ----
+    y = ph - 20;
+    doc.setFontSize(7);
+    doc.setTextColor(180);
+    doc.setFont(FF, 'normal');
+    const footerText = isAr
+      ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
+      : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.';
+    doc.text(footerText, pw / 2, y, { align: 'center' });
+
+    doc.save(isAr ? 'النخيل-شروط-الإقامة.pdf' : 'Al-Nakheel-Terms-of-Stay.pdf');
+  } catch (err) {
+    console.error('[PDF] Failed to download terms PDF:', err);
+    alert(lang === 'ar' ? 'حدث خطأ أثناء إنشاء ملف الشروط. يرجى المحاولة مرة أخرى.' : 'Failed to generate terms PDF. Please try again.');
   }
-
-  // ---- Footer ----
-  y = ph - 20;
-  doc.setFontSize(7);
-  doc.setTextColor(180);
-  doc.setFont(FF, 'normal');
-  const footerText = isAr
-    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
-    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.';
-  doc.text(footerText, pw / 2, y, { align: 'center' });
-
-  doc.save(isAr ? 'النخيل-شروط-الإقامة.pdf' : 'Al-Nakheel-Terms-of-Stay.pdf');
 }

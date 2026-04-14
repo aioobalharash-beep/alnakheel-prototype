@@ -63,23 +63,28 @@ export const Confirmation: React.FC = () => {
     return `${booking.nights} ${nightWord} — ${propertyName}`;
   })();
 
-  const handleViewInvoice = async () => {
-    const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
-    const pdfDoc = await generateInvoicePDF({
-      id: booking.id,
-      guest_name: booking.guest_name,
-      room_type: propertyName,
-      issued_date: booking.created_at,
-      subtotal: grandTotal,
-      vat_amount: 0,
-      total_amount: grandTotal,
-      items: [
-        { description: stayLabel, amount: stayTotal },
-        ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
-      ],
-    }, lang);
-    const blobUrl = pdfDoc.output('bloburl');
-    window.open(blobUrl as string, '_blank');
+  const handleViewInvoice = () => {
+    try {
+      const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
+      const pdfDoc = generateInvoicePDF({
+        id: booking.id,
+        guest_name: booking.guest_name,
+        room_type: propertyName,
+        issued_date: booking.created_at,
+        subtotal: grandTotal,
+        vat_amount: 0,
+        total_amount: grandTotal,
+        items: [
+          { description: stayLabel, amount: stayTotal },
+          ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
+        ],
+      }, lang);
+      const blobUrl = pdfDoc.output('bloburl');
+      window.open(blobUrl as string, '_blank');
+    } catch (err) {
+      console.error('[Confirmation] Failed to generate invoice PDF:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء إنشاء الفاتورة.' : 'Failed to generate invoice.');
+    }
   };
 
   const handleLocationPin = () => {
