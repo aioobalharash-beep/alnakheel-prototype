@@ -220,7 +220,11 @@
     "paid": "Paid via Thawani",
     "pendingReview": "Pending Review",
     "returnHome": "Return Home",
-    "bookAnother": "Book Another Stay"
+    "bookAnother": "Book Another Stay",
+    "viewInvoice": "View Invoice",
+    "bankTransferPending": "Your tax invoice will be generated once our team approves your bank transfer.",
+    "mobileTransfer": "Mobile Transfer (WhatsApp/Bank App):",
+    "getLocationPin": "Get Location Pin"
   },
   "invoices": {
     "invoiceCenter": "Invoice Centre",

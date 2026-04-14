@@ -220,7 +220,11 @@
     "paid": "مدفوع عبر ثواني",
     "pendingReview": "قيد المراجعة",
     "returnHome": "العودة للرئيسية",
-    "bookAnother": "حجز إقامة أخرى"
+    "bookAnother": "حجز إقامة أخرى",
+    "viewInvoice": "عرض الفاتورة",
+    "bankTransferPending": "سيتم إصدار فاتورتك الضريبية بعد موافقة فريقنا على التحويل البنكي.",
+    "mobileTransfer": "تحويل عبر الجوال (واتساب/تطبيق البنك):",
+    "getLocationPin": "الحصول على الموقع"
   },
   "invoices": {
     "invoiceCenter": "مركز الفواتير",

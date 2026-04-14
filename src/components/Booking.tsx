@@ -407,6 +407,7 @@ export const Booking: React.FC = () => {
             ...(selectedSlot ? {
               slot_id: selectedSlot.id,
               slot_name: selectedSlot.name,
+              slot_name_ar: selectedSlot.name_ar || '',
               slot_start_time: selectedSlot.start_time,
               slot_end_time: selectedSlot.end_time,
             } : {}),
@@ -476,6 +477,7 @@ export const Booking: React.FC = () => {
         ...(selectedSlot ? {
           slot_id: selectedSlot.id,
           slot_name: selectedSlot.name,
+          slot_name_ar: selectedSlot.name_ar || '',
           slot_start_time: selectedSlot.start_time,
           slot_end_time: selectedSlot.end_time,
         } : {}),
