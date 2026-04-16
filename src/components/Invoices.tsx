@@ -411,7 +411,7 @@ export const Invoices: React.FC = () => {
               <div className="p-5 bg-surface-container-low space-y-3 border-t border-primary-navy/5">
                 <div className="flex gap-3">
                   <button
-                    onClick={() => downloadInvoicePDF(selectedInvoice, i18n.language)}
+                    onClick={async () => downloadInvoicePDF(selectedInvoice, i18n.language)}
                     className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
                   >
                     <Download size={14} />

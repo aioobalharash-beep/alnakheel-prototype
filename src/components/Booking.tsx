@@ -1097,7 +1097,7 @@ export const Booking: React.FC = () => {
                   {t('booking.iAccept')}
                 </button>
                 <button
-                  onClick={() => downloadTermsPDF(termsOfStay, lang)}
+                  onClick={async () => downloadTermsPDF(termsOfStay, lang)}
                   className="w-full border-2 border-primary-navy/10 text-primary-navy/60 py-3.5 rounded-[16px] font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:border-primary-navy/20 hover:text-primary-navy"
                 >
                   <Download size={14} />

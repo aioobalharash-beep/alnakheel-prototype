@@ -1,6 +1,9 @@
 import jsPDF from 'jspdf';
-import { registerArabicFont } from './fontLoader';
-import { ar, hasArabic, processPdfText } from './arabicPdf';
+import html2canvas from 'html2canvas';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface InvoiceData {
   id: string;
@@ -14,338 +17,349 @@ interface InvoiceData {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-/** Font family — Cairo (supports Latin + Arabic glyphs) */
-const FF = 'Cairo';
+const FONT_STACK = '"IBM Plex Sans Arabic", "Cairo", "Alexandria", sans-serif';
 
-/** Page margin */
-const MARGIN = 20;
-
-/**
- * Process text for PDF rendering.
- * In Arabic mode, reshapes + bidi-reorders for correct visual display.
- * In English mode, passes through unchanged.
- */
-function t(text: string, isAr: boolean): string {
-  if (!isAr) return text;
-  return ar(text);
-}
-
-/**
- * Process guest name — may contain Arabic even in English mode.
- */
-function processName(name: string): string {
-  if (hasArabic(name)) return processPdfText(name, true);
-  return name;
-}
-
-// ---------------------------------------------------------------------------
-// Invoice PDF
-// ---------------------------------------------------------------------------
-
-export function generateInvoicePDF(invoice: InvoiceData, lang = 'en'): jsPDF {
-  const doc = new jsPDF();
-  const pw = doc.internal.pageSize.getWidth();
-  const isAr = lang === 'ar';
-
-  // Register embedded Cairo font — synchronous, no network dependency
-  registerArabicFont(doc);
-  doc.setFont(FF, 'bold');
-
-  // DO NOT use doc.setR2L(true) — it does naive char reversal that breaks
-  // reshaped Arabic. We handle visual ordering via arabic-reshaper + bidi-js.
-
-  let y = 20;
-
-  // ---- RTL layout: right-aligned start, left-aligned end ----
-  // In Arabic mode, "start" is right side, "end" is left side.
-  const startX = isAr ? pw - MARGIN : MARGIN;
-  const endX   = isAr ? MARGIN + 40 : pw - 60;
-  const startAlign: 'left' | 'right' = isAr ? 'right' : 'left';
-  const endAlign: 'left' | 'right'   = isAr ? 'left' : 'right';
-
-  // ---- Header ----
-  doc.setFontSize(22);
-  doc.setFont(FF, 'bold');
-  doc.setTextColor(1, 31, 54);
-  doc.text(
-    t(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', isAr),
-    startX, y, { align: startAlign }
-  );
-  y += 8;
-
-  doc.setFontSize(9);
-  doc.setFont(FF, 'normal');
-  doc.setTextColor(100);
-  doc.text(
-    t(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', isAr),
-    startX, y, { align: startAlign }
-  );
-  y += 4;
-  doc.text(
-    t(isAr ? 'سجل تجاري: 1234567  |  ترخيص سياحي: TL-889' : 'CR: 1234567  |  Tourism License: TL-889', isAr),
-    startX, y, { align: startAlign }
-  );
-
-  y += 15;
-  doc.setDrawColor(230);
-  doc.line(MARGIN, y, pw - MARGIN, y);
-  y += 12;
-
-  // ---- Invoice title + ID ----
-  doc.setTextColor(1, 31, 54);
-  doc.setFontSize(16);
-  doc.setFont(FF, 'bold');
-  const invoiceTitle = t(isAr ? 'فاتورة' : 'INVOICE', isAr);
-  doc.text(invoiceTitle, startX, y, { align: startAlign });
-
-  const idLabel = `#${invoice.id.slice(0, 8).toUpperCase()}`;
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  if (isAr) {
-    // Place ID to the left of the title in RTL
-    doc.setFont(FF, 'bold');
-    doc.setFontSize(16);
-    const titleWidth = doc.getTextWidth(invoiceTitle);
-    doc.setFontSize(10);
-    doc.setFont(FF, 'normal');
-    doc.text(idLabel, startX - titleWidth - 8, y, { align: 'right' });
-  } else {
-    doc.text(idLabel, 55, y);
+/** Wait for all web fonts to finish loading */
+async function ensureFontsLoaded(): Promise<void> {
+  if (document.fonts?.ready) {
+    await document.fonts.ready;
   }
-  y += 14;
+}
 
-  // ---- Billed To / Issue Date ----
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.setFont(FF, 'bold');
-  doc.text(
-    t(isAr ? 'فاتورة إلى' : 'BILLED TO', isAr),
-    startX, y, { align: startAlign }
-  );
-  doc.text(
-    t(isAr ? 'تاريخ الإصدار' : 'ISSUE DATE', isAr),
-    endX, y, { align: endAlign }
-  );
-  y += 6;
+/**
+ * Render a hidden DOM element to a high-resolution canvas,
+ * then place it as an image inside a jsPDF document.
+ *
+ * Returns the jsPDF instance for further use (save / bloburl).
+ */
+async function htmlToPdf(el: HTMLElement): Promise<jsPDF> {
+  await ensureFontsLoaded();
 
-  doc.setFontSize(11);
-  doc.setTextColor(1, 31, 54);
-  doc.setFont(FF, 'bold');
-  doc.text(processName(invoice.guest_name), startX, y, { align: startAlign });
+  const canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    backgroundColor: '#ffffff',
+  });
+
+  const imgData = canvas.toDataURL('image/png');
+  const imgW = canvas.width;
+  const imgH = canvas.height;
+
+  // A4 dimensions in mm
+  const pdfW = 210;
+  const pdfH = 297;
+  const ratio = imgW / imgH;
+  const fitH = pdfW / ratio;
+
+  const doc = new jsPDF({
+    orientation: fitH > pdfH ? 'portrait' : 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  // If content is taller than one page, scale to fit width and span pages
+  if (fitH <= pdfH) {
+    doc.addImage(imgData, 'PNG', 0, 0, pdfW, fitH, undefined, 'FAST');
+  } else {
+    // Multi-page: slice the canvas into page-sized chunks
+    const pageCanvasH = (pdfH / fitH) * imgH;
+    let srcY = 0;
+    let pageNum = 0;
+
+    while (srcY < imgH) {
+      if (pageNum > 0) doc.addPage();
+      const sliceH = Math.min(pageCanvasH, imgH - srcY);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = imgW;
+      sliceCanvas.height = sliceH;
+      const ctx = sliceCanvas.getContext('2d')!;
+      ctx.drawImage(canvas, 0, srcY, imgW, sliceH, 0, 0, imgW, sliceH);
+      const sliceData = sliceCanvas.toDataURL('image/png');
+      const sliceRenderedH = (sliceH / imgH) * fitH;
+      doc.addImage(sliceData, 'PNG', 0, 0, pdfW, sliceRenderedH, undefined, 'FAST');
+      srcY += sliceH;
+      pageNum++;
+    }
+  }
+
+  return doc;
+}
+
+/**
+ * Mount a hidden div off-screen, run a callback, then clean up.
+ */
+async function withHiddenDiv(
+  buildHtml: (container: HTMLDivElement) => void,
+): Promise<jsPDF> {
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText =
+    'position:fixed;left:-9999px;top:0;z-index:-1;pointer-events:none;';
+  document.body.appendChild(wrapper);
+
+  const container = document.createElement('div');
+  // A4 aspect ratio at 794px wide (≈ 210mm at 96dpi)
+  container.style.cssText = `width:794px;background:#fff;font-family:${FONT_STACK};`;
+  wrapper.appendChild(container);
+
+  buildHtml(container);
+
+  // Give the browser a frame to lay out + render fonts
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await ensureFontsLoaded();
+
+  const doc = await htmlToPdf(container);
+  document.body.removeChild(wrapper);
+  return doc;
+}
+
+// ---------------------------------------------------------------------------
+// Reusable style constants
+// ---------------------------------------------------------------------------
+
+const NAVY = '#011F36';
+const GOLD = '#D4AF37';
+const LIGHT_BORDER = '#e8e8e8';
+
+// ---------------------------------------------------------------------------
+// Invoice HTML builder
+// ---------------------------------------------------------------------------
+
+function buildInvoiceHtml(
+  container: HTMLDivElement,
+  invoice: InvoiceData,
+  lang: string,
+): void {
+  const isAr = lang === 'ar';
+  const dir = isAr ? 'rtl' : 'ltr';
+  const textStart = isAr ? 'text-right' : 'text-left';
+  const textEnd = isAr ? 'text-left' : 'text-right';
+
   const dateLocale = isAr ? 'ar-OM' : 'en-GB';
   const dateStr = new Date(invoice.issued_date).toLocaleDateString(dateLocale, {
-    day: 'numeric', month: 'short', year: 'numeric',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
   });
-  doc.text(t(dateStr, isAr), endX, y, { align: endAlign });
-  y += 5;
 
-  doc.setFontSize(9);
-  doc.setTextColor(100);
-  doc.setFont(FF, 'normal');
-  doc.text(t(invoice.room_type, isAr), startX, y, { align: startAlign });
-  y += 14;
+  const companyName = isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES';
+  const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
+  const regInfo = isAr
+    ? 'سجل تجاري: 1234567  |  ترخيص سياحي: TL-889'
+    : 'CR: 1234567  |  Tourism License: TL-889';
 
-  doc.setDrawColor(230);
-  doc.line(MARGIN, y, pw - MARGIN, y);
-  y += 8;
+  const invoiceTitle = isAr ? 'فاتورة' : 'INVOICE';
+  const billedToLabel = isAr ? 'فاتورة إلى' : 'BILLED TO';
+  const issueDateLabel = isAr ? 'تاريخ الحجز' : 'ISSUE DATE';
+  const descLabel = isAr ? 'البيان' : 'DESCRIPTION';
+  const amountLabel = isAr ? 'المبلغ (ر.ع.)' : 'AMOUNT (OMR)';
+  const grandTotalLabel = isAr ? 'الإجمالي العام' : 'Grand Total';
 
-  // ---- Table header ----
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.setFont(FF, 'bold');
-  doc.text(
-    t(isAr ? 'البيان' : 'DESCRIPTION', isAr),
-    startX, y, { align: startAlign }
-  );
-  doc.text(
-    t(isAr ? 'المبلغ (ر.ع.)' : 'AMOUNT (OMR)', isAr),
-    endX, y, { align: endAlign }
-  );
-  y += 4;
-  doc.setDrawColor(230);
-  doc.line(MARGIN, y, pw - MARGIN, y);
-  y += 10;
+  const fmtAmount = (n: number): string => {
+    const val = n.toFixed(2);
+    return isAr ? `${val} ر.ع.` : `OMR ${val}`;
+  };
 
-  // ---- Line items ----
-  doc.setFontSize(10);
-  doc.setTextColor(1, 31, 54);
-  doc.setFont(FF, 'normal');
+  const fmtLineAmount = (n: number): string => n.toFixed(2);
 
+  const refId = invoice.id.slice(0, 8).toUpperCase();
+
+  const footerText = isAr
+    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه فاتورة صادرة آليًا.'
+    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This is a computer-generated invoice.';
+
+  // Build items HTML
+  let itemsHtml = '';
   if (invoice.items && invoice.items.length > 0) {
     for (const item of invoice.items) {
       const isDeposit = /deposit|تأمين/i.test(item.description);
-      if (isDeposit) {
-        doc.setFont(FF, 'normal');
-        doc.setTextColor(100);
-      }
-      doc.text(t(item.description, isAr), startX, y, { align: startAlign });
-      doc.setFont(FF, 'bold');
-      doc.text(item.amount.toFixed(2), endX, y, { align: endAlign });
-      doc.setFont(FF, 'normal');
-      doc.setTextColor(1, 31, 54);
-      y += 10;
+      const descColor = isDeposit ? '#888' : NAVY;
+      itemsHtml += `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;">
+          <span style="color:${descColor};font-size:13px;">${item.description}</span>
+          <span style="font-weight:700;color:${NAVY};font-size:13px;">${fmtLineAmount(item.amount)}</span>
+        </div>`;
     }
   } else {
     const desc = isAr
       ? `رسوم الإقامة — ${invoice.room_type}`
       : `Stay Charges - ${invoice.room_type}`;
-    doc.text(t(desc, isAr), startX, y, { align: startAlign });
-    doc.setFont(FF, 'bold');
-    doc.text(invoice.subtotal.toFixed(2), endX, y, { align: endAlign });
-    y += 10;
+    itemsHtml = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;">
+        <span style="color:${NAVY};font-size:13px;">${desc}</span>
+        <span style="font-weight:700;color:${NAVY};font-size:13px;">${fmtLineAmount(invoice.subtotal)}</span>
+      </div>`;
   }
 
-  y += 4;
-  doc.setDrawColor(230);
-  doc.line(MARGIN, y, pw - MARGIN, y);
-  y += 12;
+  container.setAttribute('dir', dir);
+  container.innerHTML = `
+    <div style="padding:48px 48px 36px;font-family:${FONT_STACK};color:${NAVY};line-height:1.6;">
 
-  // ---- Grand Total ----
-  doc.setFontSize(14);
-  doc.setFont(FF, 'bold');
-  doc.setTextColor(1, 31, 54);
-  doc.text(
-    t(isAr ? 'الإجمالي' : 'Grand Total', isAr),
-    startX, y, { align: startAlign }
-  );
-  doc.setTextColor(212, 175, 55);
-  // Currency: "25.00 ر.ع." in Arabic, "OMR 25.00" in English
-  const totalStr = isAr
-    ? t(`${invoice.total_amount.toFixed(2)} ر.ع.`, true)
-    : `OMR ${invoice.total_amount.toFixed(2)}`;
-  doc.text(totalStr, endX, y, { align: endAlign });
+      <!-- Header -->
+      <div style="${textStart};margin-bottom:4px;">
+        <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">${companyName}</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">${location}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px;">${regInfo}</div>
+      </div>
 
-  // ---- Footer ----
-  y = doc.internal.pageSize.getHeight() - 20;
-  doc.setFontSize(7);
-  doc.setTextColor(180);
-  doc.setFont(FF, 'normal');
-  const footerText = isAr
-    ? t('النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه فاتورة صادرة آليًا.', true)
-    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This is a computer-generated invoice.';
-  doc.text(footerText, pw / 2, y, { align: 'center' });
+      <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:24px 0;" />
 
-  return doc;
+      <!-- Invoice title + ref -->
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div style="font-size:20px;font-weight:700;">${invoiceTitle}</div>
+        <div style="font-size:11px;color:#999;font-weight:600;">#${refId}</div>
+      </div>
+
+      <div style="margin-top:20px;display:flex;justify-content:space-between;">
+        <!-- Billed To -->
+        <div>
+          <div style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;">${billedToLabel}</div>
+          <div style="font-size:14px;font-weight:700;">${invoice.guest_name}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px;">${invoice.room_type}</div>
+        </div>
+        <!-- Issue Date -->
+        <div style="${textEnd};">
+          <div style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;">${issueDateLabel}</div>
+          <div style="font-size:14px;font-weight:700;">${dateStr}</div>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:24px 0;" />
+
+      <!-- Table header -->
+      <div style="display:flex;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid ${LIGHT_BORDER};">
+        <span style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;">${descLabel}</span>
+        <span style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;">${amountLabel}</span>
+      </div>
+
+      <!-- Line items -->
+      ${itemsHtml}
+
+      <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:16px 0;" />
+
+      <!-- Grand total -->
+      <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;">
+        <span style="font-size:17px;font-weight:700;">${grandTotalLabel}</span>
+        <span style="font-size:20px;font-weight:700;color:${GOLD};">${fmtAmount(invoice.total_amount)}</span>
+      </div>
+
+      <!-- Footer -->
+      <div style="margin-top:60px;text-align:center;font-size:8px;color:#bbb;letter-spacing:1px;">
+        ${footerText}
+      </div>
+    </div>
+  `;
 }
 
-export function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
+// ---------------------------------------------------------------------------
+// Terms HTML builder
+// ---------------------------------------------------------------------------
+
+function buildTermsHtml(
+  container: HTMLDivElement,
+  termsText: string,
+  lang: string,
+): void {
+  const isAr = lang === 'ar';
+  const dir = isAr ? 'rtl' : 'ltr';
+  const textStart = isAr ? 'text-right' : 'text-left';
+
+  const companyName = isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES';
+  const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
+  const title = isAr ? 'شروط الإقامة' : 'Terms of Stay';
+
+  const dateLocale = isAr ? 'ar-OM' : 'en-GB';
+  const genLabel = isAr ? 'تاريخ الإصدار: ' : 'Generated: ';
+  const genDate = new Date().toLocaleDateString(dateLocale, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const footerText = isAr
+    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
+    : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.';
+
+  // Convert newlines to paragraphs
+  const bodyHtml = termsText
+    .split(/\n+/)
+    .filter((p) => p.trim())
+    .map((p) => `<p style="margin:0 0 10px;font-size:12px;color:#333;line-height:1.8;">${p}</p>`)
+    .join('');
+
+  container.setAttribute('dir', dir);
+  container.innerHTML = `
+    <div style="padding:48px 48px 36px;font-family:${FONT_STACK};color:${NAVY};line-height:1.6;">
+
+      <!-- Header -->
+      <div style="${textStart};margin-bottom:4px;">
+        <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">${companyName}</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">${location}</div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:24px 0;" />
+
+      <!-- Title -->
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px;">${title}</div>
+      <div style="font-size:9px;color:#aaa;margin-bottom:20px;">${genLabel}${genDate}</div>
+
+      <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:0 0 20px;" />
+
+      <!-- Body -->
+      <div>${bodyHtml}</div>
+
+      <!-- Footer -->
+      <div style="margin-top:40px;text-align:center;font-size:8px;color:#bbb;letter-spacing:1px;">
+        ${footerText}
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Public API — same signatures, now powered by HTML snapshot
+// ---------------------------------------------------------------------------
+
+export async function generateInvoicePDF(
+  invoice: InvoiceData,
+  lang = 'en',
+): Promise<jsPDF> {
+  return withHiddenDiv((el) => buildInvoiceHtml(el, invoice, lang));
+}
+
+export async function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
   try {
-    const doc = generateInvoicePDF(invoice, lang);
+    const doc = await generateInvoicePDF(invoice, lang);
     doc.save(`Al-Nakheel-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
   } catch (err) {
     console.error('[PDF] Failed to download invoice PDF:', err);
-    alert(lang === 'ar'
-      ? 'حدث خطأ أثناء إنشاء الفاتورة. يرجى المحاولة مرة أخرى.'
-      : 'Failed to generate invoice. Please try again.');
+    alert(
+      lang === 'ar'
+        ? 'حدث خطأ أثناء إنشاء الفاتورة. يرجى المحاولة مرة أخرى.'
+        : 'Failed to generate invoice. Please try again.',
+    );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Terms of Stay PDF
-// ---------------------------------------------------------------------------
-
-export function downloadTermsPDF(termsText: string, lang = 'en') {
+export async function downloadTermsPDF(termsText: string, lang = 'en') {
   try {
-    const doc = new jsPDF();
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const maxWidth = pw - MARGIN * 2;
-    const isAr = lang === 'ar';
-
-    // Register embedded Cairo font — synchronous
-    registerArabicFont(doc);
-    doc.setFont(FF, 'bold');
-
-    let y = 20;
-
-    const startX = isAr ? pw - MARGIN : MARGIN;
-    const startAlign: 'left' | 'right' = isAr ? 'right' : 'left';
-
-    // ---- Header ----
-    doc.setFontSize(22);
-    doc.setFont(FF, 'bold');
-    doc.setTextColor(1, 31, 54);
-    doc.text(
-      t(isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES', isAr),
-      startX, y, { align: startAlign }
+    const doc = await withHiddenDiv((el) =>
+      buildTermsHtml(el, termsText, lang),
     );
-    y += 8;
-
-    doc.setFontSize(9);
-    doc.setFont(FF, 'normal');
-    doc.setTextColor(100);
-    doc.text(
-      t(isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman', isAr),
-      startX, y, { align: startAlign }
+    doc.save(
+      lang === 'ar'
+        ? 'النخيل-شروط-الإقامة.pdf'
+        : 'Al-Nakheel-Terms-of-Stay.pdf',
     );
-    y += 14;
-
-    doc.setDrawColor(230);
-    doc.line(MARGIN, y, pw - MARGIN, y);
-    y += 12;
-
-    // ---- Title ----
-    doc.setFontSize(16);
-    doc.setFont(FF, 'bold');
-    doc.setTextColor(1, 31, 54);
-    doc.text(
-      t(isAr ? 'شروط الإقامة' : 'Terms of Stay', isAr),
-      startX, y, { align: startAlign }
-    );
-    y += 8;
-
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.setFont(FF, 'normal');
-    const dateLocale = isAr ? 'ar-OM' : 'en-GB';
-    const genLabel = isAr ? 'تاريخ الإصدار: ' : 'Generated: ';
-    const genDate = new Date().toLocaleDateString(dateLocale, {
-      day: 'numeric', month: 'long', year: 'numeric',
-    });
-    doc.text(t(genLabel + genDate, isAr), startX, y, { align: startAlign });
-    y += 12;
-
-    doc.setDrawColor(230);
-    doc.line(MARGIN, y, pw - MARGIN, y);
-    y += 10;
-
-    // ---- Body ----
-    doc.setFontSize(10);
-    doc.setTextColor(40);
-    doc.setFont(FF, 'normal');
-
-    // Process the terms text through reshaper/bidi if Arabic
-    const processedTerms = isAr ? ar(termsText) : termsText;
-    const lines = doc.splitTextToSize(processedTerms, maxWidth);
-    const lineHeight = 5.5;
-
-    for (const line of lines) {
-      if (y + lineHeight > ph - 25) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.text(line, startX, y, { align: startAlign });
-      y += lineHeight;
-    }
-
-    // ---- Footer ----
-    y = ph - 20;
-    doc.setFontSize(7);
-    doc.setTextColor(180);
-    doc.setFont(FF, 'normal');
-    const footerText = isAr
-      ? t('النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.', true)
-      : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This document is for informational purposes.';
-    doc.text(footerText, pw / 2, y, { align: 'center' });
-
-    doc.save(isAr ? 'النخيل-شروط-الإقامة.pdf' : 'Al-Nakheel-Terms-of-Stay.pdf');
   } catch (err) {
     console.error('[PDF] Failed to download terms PDF:', err);
-    alert(lang === 'ar'
-      ? 'حدث خطأ أثناء إنشاء ملف الشروط. يرجى المحاولة مرة أخرى.'
-      : 'Failed to generate terms PDF. Please try again.');
+    alert(
+      lang === 'ar'
+        ? 'حدث خطأ أثناء إنشاء ملف الشروط. يرجى المحاولة مرة أخرى.'
+        : 'Failed to generate terms PDF. Please try again.',
+    );
   }
 }

@@ -68,10 +68,10 @@ export const Confirmation: React.FC = () => {
     return `${booking.nights} ${nightWord} — ${propertyName}`;
   })();
 
-  const handleViewInvoice = () => {
+  const handleViewInvoice = async () => {
     try {
       const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
-      const pdfDoc = generateInvoicePDF({
+      const pdfDoc = await generateInvoicePDF({
         id: booking.id,
         guest_name: booking.guest_name,
         room_type: propertyName,
