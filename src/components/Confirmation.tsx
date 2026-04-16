@@ -52,9 +52,14 @@ export const Confirmation: React.FC = () => {
 
   const stayLabel = (() => {
     if (isDayUse) {
+      if (isFullDay) {
+        const fullDayLabel = lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Full Day';
+        return `${fullDayLabel} — ${propertyName}`;
+      }
+      // Partial slot — use specific slot name when available, else generic "partial"
       const slotDisplay = booking.slot_name
         ? (lang === 'ar' && booking.slot_name_ar ? booking.slot_name_ar : booking.slot_name)
-        : (lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Day Use');
+        : (lang === 'ar' ? 'حجز جزئي' : 'Partial Booking');
       return `${slotDisplay} — ${propertyName}`;
     }
     const nightWord = lang === 'ar'
