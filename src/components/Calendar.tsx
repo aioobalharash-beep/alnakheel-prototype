@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useTranslation } from 'react-i18next';
-import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
 
@@ -25,16 +25,6 @@ interface RealtimeBooking {
   slot_name?: string;
   slot_start_time?: string;
   slot_end_time?: string;
-}
-
-interface RealtimeTransaction {
-  id: string;
-  type: 'payment' | 'refund';
-  description: string;
-  amount: number;
-  booking_id?: string;
-  date: string;
-  created_at: string;
 }
 
 interface CompareModalProps {
@@ -166,7 +156,6 @@ export const Calendar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
-  const [transactions, setTransactions] = useState<RealtimeTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompare, setShowCompare] = useState(false);
 
@@ -199,14 +188,21 @@ export const Calendar: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Real-time listener on transactions (latest 4)
-  useEffect(() => {
-    const q = query(collection(db, 'transactions'), orderBy('created_at', 'desc'), limit(4));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setTransactions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeTransaction)));
-    });
-    return () => unsubscribe();
-  }, []);
+  // Derive recent transactions from bookings: only paid, non-cancelled, latest 4
+  const recentTransactions = useMemo(() =>
+    bookings
+      .filter(b => b.status !== 'cancelled' && b.payment_status === 'paid')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 4)
+      .map(b => ({
+        id: b.id,
+        type: 'payment' as const,
+        description: `Booking Payment – ${b.property_name}`,
+        amount: Number(b.grandTotal) || Number(b.total_amount) || 0,
+        date: b.created_at ? b.created_at.split('T')[0] : '',
+      })),
+    [bookings]
+  );
 
   // Build a map of day -> booking info for current month
   const getBookedDayMap = (): Map<number, { status: 'pending' | 'confirmed'; isDayUse: boolean; bookings: RealtimeBooking[] }> => {
@@ -542,23 +538,23 @@ export const Calendar: React.FC = () => {
       <section className="space-y-4">
         <h3 className="font-headline text-lg font-bold text-primary-navy px-1">{t('calendar.recentTransactions')}</h3>
         <div className="bg-white rounded-xl overflow-hidden border border-primary-navy/5 shadow-sm">
-          {transactions.map((tx, i) => (
-            <div key={tx.id} className={cn("p-4 flex items-center justify-between", i < transactions.length - 1 && "border-b border-primary-navy/5")}>
+          {recentTransactions.map((tx, i) => (
+            <div key={tx.id} className={cn("p-4 flex items-center justify-between", i < recentTransactions.length - 1 && "border-b border-primary-navy/5")}>
               <div className="flex items-center gap-3">
-                <div className={cn("p-2 rounded-lg", tx.type === 'refund' ? "bg-red-50" : "bg-emerald-50")}>
-                  {tx.type === 'refund' ? <ArrowDownLeft className="text-red-500" size={18} /> : <ArrowUpRight className="text-emerald-500" size={18} />}
+                <div className="p-2 rounded-lg bg-emerald-50">
+                  <ArrowUpRight className="text-emerald-500" size={18} />
                 </div>
                 <div>
                   <p className="text-sm font-bold">{tx.description}</p>
                   <p className="text-[10px] text-primary-navy/40 uppercase font-bold">{tx.date} &bull; ID #{tx.id.slice(0, 4)}</p>
                 </div>
               </div>
-              <p className={cn("text-sm font-bold", tx.amount < 0 ? "text-red-500" : "text-emerald-500")}>
-                {tx.amount > 0 ? '+' : ''}{Math.abs(tx.amount).toFixed(2)} OMR
+              <p className="text-sm font-bold text-emerald-500">
+                +{tx.amount.toFixed(2)} OMR
               </p>
             </div>
           ))}
-          {transactions.length === 0 && (
+          {recentTransactions.length === 0 && (
             <p className="text-center text-sm text-primary-navy/40 py-8">{t('calendar.noTransactions')}</p>
           )}
         </div>
