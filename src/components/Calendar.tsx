@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { transactionsApi } from '../services/api';
 import { useTranslation } from 'react-i18next';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
-import type { Transaction } from '../types';
 
 interface RealtimeBooking {
   id: string;
@@ -27,6 +25,16 @@ interface RealtimeBooking {
   slot_name?: string;
   slot_start_time?: string;
   slot_end_time?: string;
+}
+
+interface RealtimeTransaction {
+  id: string;
+  type: 'payment' | 'refund';
+  description: string;
+  amount: number;
+  booking_id?: string;
+  date: string;
+  created_at: string;
 }
 
 interface CompareModalProps {
@@ -158,7 +166,7 @@ export const Calendar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<RealtimeTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompare, setShowCompare] = useState(false);
 
@@ -188,9 +196,15 @@ export const Calendar: React.FC = () => {
       console.error('Bookings listener error:', error);
       setLoading(false);
     });
+    return () => unsubscribe();
+  }, []);
 
-    transactionsApi.list(5).then(setTransactions).catch(console.error);
-
+  // Real-time listener on transactions (latest 4)
+  useEffect(() => {
+    const q = query(collection(db, 'transactions'), orderBy('created_at', 'desc'), limit(4));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setTransactions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeTransaction)));
+    });
     return () => unsubscribe();
   }, []);
 
@@ -378,7 +392,7 @@ export const Calendar: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="font-headline text-xl font-bold text-primary-navy">{monthName}</h2>
-            <p className="text-xs text-primary-navy/40 font-medium">{bookings.length} {t('calendar.totalBookings')}</p>
+            <p className="text-xs text-primary-navy/40 font-medium">{currentMonthBookings.length} {t('calendar.totalBookings')}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={prevMonth} className="p-2 rounded-full hover:bg-primary-navy/5 transition-colors"><ChevronLeft size={20} /></button>
@@ -528,7 +542,7 @@ export const Calendar: React.FC = () => {
       <section className="space-y-4">
         <h3 className="font-headline text-lg font-bold text-primary-navy px-1">{t('calendar.recentTransactions')}</h3>
         <div className="bg-white rounded-xl overflow-hidden border border-primary-navy/5 shadow-sm">
-          {transactions.slice(0, 4).map((tx, i) => (
+          {transactions.map((tx, i) => (
             <div key={tx.id} className={cn("p-4 flex items-center justify-between", i < transactions.length - 1 && "border-b border-primary-navy/5")}>
               <div className="flex items-center gap-3">
                 <div className={cn("p-2 rounded-lg", tx.type === 'refund' ? "bg-red-50" : "bg-emerald-50")}>
