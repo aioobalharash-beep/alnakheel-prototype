@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3 } from 'lucide-react';
+import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3, Paperclip } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -49,6 +49,7 @@ export const Invoices: React.FC = () => {
   );
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
+  const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
 
   // Load WhatsApp template from Firestore on mount
   useEffect(() => {
@@ -294,13 +295,27 @@ export const Invoices: React.FC = () => {
                 >
                   {/* Guest Name + Status Badge */}
                   <div className="col-span-4">
-                    <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
+                      {b.receiptURL && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setReceiptViewURL(b.receiptURL); }}
+                          title="View attached receipt"
+                          className="p-1 rounded-md text-secondary-gold hover:bg-secondary-gold/10 active:scale-90 transition-all"
+                        >
+                          <Paperclip size={12} />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={cn(
                         "text-[8px] font-bold uppercase px-2 py-0.5 rounded-full",
-                        status === 'sent' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                        b.payment_status === 'free' ? "bg-secondary-gold/10 text-secondary-gold" :
+                        status === 'sent' ? "bg-emerald-50 text-emerald-600" :
+                        "bg-amber-50 text-amber-600"
                       )}>
-                        {status}
+                        {b.payment_status === 'free' ? 'free' : status}
                       </span>
                       <span className="text-[10px] text-primary-navy/40 font-medium md:hidden">{b.property_name}</span>
                     </div>
@@ -410,6 +425,59 @@ export const Invoices: React.FC = () => {
           </p>
         </div>
       </section>
+
+      {/* Receipt Viewer Modal */}
+      <AnimatePresence>
+        {receiptViewURL && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setReceiptViewURL(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[24px] w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-primary-navy/5">
+                <div className="flex items-center gap-2">
+                  <Paperclip size={16} className="text-secondary-gold" />
+                  <h3 className="font-headline font-bold text-primary-navy">Payment Receipt</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={receiptViewURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-primary-navy/5 text-primary-navy text-[10px] font-bold uppercase tracking-widest hover:bg-primary-navy/10 transition-all"
+                  >
+                    Open Full Size
+                  </a>
+                  <button onClick={() => setReceiptViewURL(null)} className="p-2 hover:bg-primary-navy/5 rounded-full">
+                    <X size={18} className="text-primary-navy/40" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-surface-container-low">
+                {receiptViewURL.toLowerCase().endsWith('.pdf') ? (
+                  <iframe src={receiptViewURL} className="w-full h-[60vh] rounded-lg border-0" title="Receipt PDF" />
+                ) : (
+                  <img
+                    src={receiptViewURL}
+                    alt="Payment Receipt"
+                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Invoice Preview Modal — only opens when a specific invoice is selected */}
       <AnimatePresence>

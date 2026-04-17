@@ -28,6 +28,9 @@ interface RealtimeBooking {
   check_out: string;
   nights: number;
   total_amount: number;
+  grandTotal?: number;
+  depositAmount?: number;
+  security_deposit?: number;
   status: string;
   payment_status: string;
   slot_name?: string;
@@ -221,6 +224,12 @@ export const Dashboard: React.FC = () => {
   // Recompute stats from real-time bookings
   const pendingCount = bookings.filter(b => b.status === 'pending').length;
 
+  // Live revenue: grandTotal sum of non-cancelled AND paid bookings.
+  // Excludes 'free' and 'pending' payment statuses.
+  const liveRevenue = bookings
+    .filter(b => b.status !== 'cancelled' && b.payment_status === 'paid')
+    .reduce((sum, b) => sum + (Number(b.grandTotal) || Number(b.total_amount) || 0), 0);
+
   return (
     <div className="p-6 md:p-8 space-y-8 max-w-4xl mx-auto">
       <motion.section
@@ -244,12 +253,9 @@ export const Dashboard: React.FC = () => {
             <Banknote className="text-secondary-gold" size={20} />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-headline">{formatCurrency(data.revenue.total)}</span>
-            <span className={cn("text-xs font-bold", data.revenue.trend >= 0 ? "text-emerald-600" : "text-red-500")}>
-              {data.revenue.trend >= 0 ? '+' : ''}{data.revenue.trend}%
-            </span>
+            <span className="text-2xl font-bold font-headline">{formatCurrency(liveRevenue)}</span>
           </div>
-          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">{t('dashboard.last30Days')}</p>
+          <p className="text-[10px] text-primary-navy/40 mt-2 font-medium">{t('dashboard.paidBookings')}</p>
         </motion.div>
 
         <motion.div

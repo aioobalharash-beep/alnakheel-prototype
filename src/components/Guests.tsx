@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban, Paperclip } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban, Paperclip, Upload, Gift } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { propertiesApi } from '../services/api';
@@ -81,6 +81,11 @@ export const Guests: React.FC = () => {
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'paid' | 'free'>('paid');
+  const [amountPaid, setAmountPaid] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptFileName, setReceiptFileName] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Real-time bookings from Firestore
   useEffect(() => {
@@ -217,19 +222,72 @@ export const Guests: React.FC = () => {
     }
   };
 
+  const uploadReceipt = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      if (!cloudName) { reject(new Error('Cloudinary cloud name is not configured')); return; }
+      const formData = new FormData();
+      formData.append('file', file as Blob);
+      formData.append('upload_preset', 'receipts_preset');
+      formData.append('folder', 'alnakheel-receipts');
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        setUploadProgress(null);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const res = JSON.parse(xhr.responseText);
+          resolve(res.secure_url);
+        } else {
+          reject(new Error('Upload failed'));
+        }
+      };
+      xhr.onerror = () => { setUploadProgress(null); reject(new Error('Network error')); };
+      xhr.send(formData);
+    });
+  };
+
+  const resetAddForm = () => {
+    setAddForm({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
+    setPaymentMode('paid');
+    setAmountPaid('');
+    setReceiptFile(null);
+    setReceiptFileName('');
+    setAddErrors({});
+  };
+
   const handleAddGuest = async () => {
     const errs: Record<string, string> = {};
     if (!addForm.name.trim()) errs.name = 'Name is required';
     if (!addForm.phone.trim()) errs.phone = 'Phone is required';
     if (!addForm.check_in) errs.check_in = 'Check-in date is required';
     if (!addForm.check_out) errs.check_out = 'Check-out date is required';
+    if (paymentMode === 'paid') {
+      const amt = parseFloat(amountPaid);
+      if (!amountPaid || isNaN(amt) || amt <= 0) errs.amount = 'Amount paid is required';
+    }
     setAddErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     setAddSubmitting(true);
     try {
-      // Single-property app: auto-assign the first property
+      // Upload receipt first (optional, only for paid bookings with a file)
+      let receiptURL = '';
+      if (paymentMode === 'paid' && receiptFile) {
+        try {
+          receiptURL = await uploadReceipt(receiptFile);
+        } catch (uploadErr) {
+          console.error('Receipt upload failed:', uploadErr);
+          setAddErrors({ receipt: 'Receipt upload failed. Please try again.' });
+          setAddSubmitting(false);
+          return;
+        }
+      }
+
       const prop = properties[0];
+      const parsedAmount = paymentMode === 'paid' ? parseFloat(amountPaid) : 0;
       await firestoreBookings.create({
         property_id: prop?.id || 'default',
         property_name: prop?.name || 'Al-Nakheel Chalet',
@@ -239,11 +297,14 @@ export const Guests: React.FC = () => {
         check_in: addForm.check_in,
         check_out: addForm.check_out,
         nightly_rate: prop?.nightly_rate || 120,
-        security_deposit: prop?.security_deposit || 50,
+        security_deposit: 0,
         payment_method: 'walk_in',
+        payment_mode: paymentMode,
+        amount_paid: parsedAmount,
+        receiptURL,
       });
       setShowAddModal(false);
-      setAddForm({ name: '', phone: '', email: '', check_in: '', check_out: '', property_id: '', property_name: '' });
+      resetAddForm();
     } catch (err) {
       console.error('Failed to add guest:', err);
     } finally {
@@ -656,11 +717,98 @@ export const Guests: React.FC = () => {
                   {addErrors.check_out && <p className="text-red-500 text-xs">{addErrors.check_out}</p>}
                 </div>
               </div>
+
+              {/* Payment Mode Toggle */}
+              <div className="space-y-3 pt-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('guests.paymentMode')}</label>
+                <div className="grid grid-cols-2 gap-2 bg-surface-container-low rounded-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('paid')}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-[0.98]",
+                      paymentMode === 'paid'
+                        ? "bg-primary-navy text-white shadow-sm"
+                        : "text-primary-navy/50 hover:text-primary-navy/70"
+                    )}
+                  >
+                    <Check size={13} />
+                    {t('guests.paid')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('free')}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-[0.98]",
+                      paymentMode === 'free'
+                        ? "bg-secondary-gold text-primary-navy shadow-sm"
+                        : "text-primary-navy/50 hover:text-primary-navy/70"
+                    )}
+                  >
+                    <Gift size={13} />
+                    {t('guests.free')}
+                  </button>
+                </div>
+
+                {paymentMode === 'paid' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('guests.amountPaid')} *</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={amountPaid}
+                          onChange={(e) => setAmountPaid(e.target.value)}
+                          placeholder="0.00"
+                          className={cn("flex-1 bg-surface-container-low border rounded-xl py-3 px-4 text-sm placeholder:text-primary-navy/20", addErrors.amount ? "border-red-300" : "border-transparent")}
+                        />
+                        <div className="bg-surface-container-low rounded-xl py-3 px-3 text-sm font-bold text-primary-navy/60">{t('common.omr')}</div>
+                      </div>
+                      {addErrors.amount && <p className="text-red-500 text-xs">{addErrors.amount}</p>}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('guests.attachReceipt')}</label>
+                      <label className="flex items-center gap-3 bg-surface-container-low border border-transparent rounded-xl py-3 px-4 cursor-pointer hover:border-secondary-gold/40 transition-colors">
+                        <Upload size={16} className="text-primary-navy/50 flex-shrink-0" />
+                        <span className="text-sm text-primary-navy/60 truncate flex-1">
+                          {receiptFileName || t('guests.chooseFile')}
+                        </span>
+                        {uploadProgress !== null && (
+                          <span className="text-[10px] font-bold text-secondary-gold">{uploadProgress}%</span>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) { setReceiptFile(f); setReceiptFileName(f.name); }
+                          }}
+                        />
+                      </label>
+                      {addErrors.receipt && <p className="text-red-500 text-xs">{addErrors.receipt}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {paymentMode === 'free' && (
+                  <div className="bg-secondary-gold/10 border border-secondary-gold/30 rounded-xl p-3 flex items-start gap-2">
+                    <Gift size={14} className="text-secondary-gold mt-0.5 flex-shrink-0" />
+                    <p className="text-[11px] text-primary-navy/70 font-medium leading-relaxed">
+                      {t('guests.freeBookingNote')}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-6 border-t border-primary-navy/5 flex gap-3">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); resetAddForm(); }}
                 className="flex-1 py-3 rounded-xl border border-primary-navy/20 font-bold text-xs uppercase tracking-widest text-primary-navy"
               >
                 {t('common.cancel')}
