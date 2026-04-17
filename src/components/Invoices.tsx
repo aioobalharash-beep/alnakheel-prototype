@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3, Paperclip } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
@@ -51,6 +51,11 @@ export const Invoices: React.FC = () => {
   const [templateSaving, setTemplateSaving] = useState(false);
   const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
 
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
+  const [hasMore, setHasMore] = useState(true);
+
   // Load WhatsApp template from Firestore on mount
   useEffect(() => {
     const loadTemplate = async () => {
@@ -67,8 +72,9 @@ export const Invoices: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'), limit(pageLimit));
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasMore(snapshot.docs.length >= pageLimit);
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking));
       setBookings(data);
       setLoading(false);
@@ -77,7 +83,7 @@ export const Invoices: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [pageLimit]);
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
@@ -363,6 +369,14 @@ export const Invoices: React.FC = () => {
             })
           )}
         </div>
+        {!loading && hasMore && nonCancelledBookings.length > 0 && (
+          <button
+            onClick={() => setPageLimit(prev => prev + PAGE_SIZE)}
+            className="w-full py-3 text-sm font-bold text-secondary-gold hover:text-primary-navy bg-white rounded-xl border border-primary-navy/5 shadow-sm transition-colors mt-4"
+          >
+            {t('common.loadMore')}
+          </button>
+        )}
       </section>
 
       {/* SECTION 2: Monthly VAT Reports */}
