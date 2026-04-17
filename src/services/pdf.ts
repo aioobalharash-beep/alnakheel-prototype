@@ -158,34 +158,69 @@ function buildInvoiceHtml(
   const amountLabel = isAr ? 'المبلغ (ر.ع.)' : 'AMOUNT (OMR)';
   const grandTotalLabel = isAr ? 'الإجمالي العام' : 'Grand Total';
 
+  // Translate property name for Arabic
+  const localizedProperty = isAr ? 'محمية النخيل' : invoice.room_type;
+
   const fmtAmount = (n: number): string => {
     const val = n.toFixed(2);
     return isAr ? `${val} ر.ع.` : `OMR ${val}`;
   };
 
-  const fmtLineAmount = (n: number): string => n.toFixed(2);
+  const fmtLineAmount = (n: number): string => {
+    const val = n.toFixed(2);
+    return isAr ? `${val} ر.ع.` : val;
+  };
+
+  /**
+   * Localize an item description for Arabic invoices.
+   * Translates known English patterns into proper Arabic equivalents.
+   */
+  const localizeDesc = (desc: string): string => {
+    if (!isAr) return desc;
+    // Already Arabic — pass through
+    if (/[\u0600-\u06FF]/.test(desc)) return desc;
+    // Known patterns
+    if (/refundable\s*security\s*deposit/i.test(desc)) return 'مبلغ التأمين المسترد';
+    if (/full\s*day/i.test(desc)) return `يوم كامل بدون مبيت — ${localizedProperty}`;
+    if (/day\s*use/i.test(desc)) return `يوم كامل بدون مبيت — ${localizedProperty}`;
+    if (/partial/i.test(desc)) return `حجز جزئي — ${localizedProperty}`;
+    if (/morning/i.test(desc)) return `فترة صباحية — ${localizedProperty}`;
+    if (/afternoon|evening/i.test(desc)) return `فترة مسائية — ${localizedProperty}`;
+    // Generic stay pattern: "3 Nights — Property Name" or "1 Night — Property Name"
+    const nightMatch = desc.match(/^(\d+)\s*nights?\s*[—–-]/i);
+    if (nightMatch) {
+      const n = parseInt(nightMatch[1], 10);
+      const nightWord = n > 1 ? 'ليالٍ' : 'ليلة';
+      return `${n} ${nightWord} — ${localizedProperty}`;
+    }
+    // Slot name patterns: "SlotName — Property" → keep slot, replace property
+    const slotMatch = desc.match(/^(.+?)\s*[—–-]\s*.+$/);
+    if (slotMatch) return `${slotMatch[1]} — ${localizedProperty}`;
+    return desc;
+  };
 
   const refId = invoice.id.slice(0, 8).toUpperCase();
 
   const footerText = isAr
-    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه فاتورة صادرة آليًا.'
+    ? 'النخيل للعقارات الفاخرة  |  مسقط، سلطنة عُمان  |  هذه فاتورة صادرة آلياً ولا تتطلب توقيعاً'
     : 'Al-Nakheel Luxury Properties  |  Muscat, Sultanate of Oman  |  This is a computer-generated invoice.';
 
   // Build items HTML
   let itemsHtml = '';
   if (invoice.items && invoice.items.length > 0) {
     for (const item of invoice.items) {
+      const localDesc = localizeDesc(item.description);
       const isDeposit = /deposit|تأمين/i.test(item.description);
       const descColor = isDeposit ? '#888' : NAVY;
       itemsHtml += `
         <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;">
-          <span style="color:${descColor};font-size:13px;">${item.description}</span>
+          <span style="color:${descColor};font-size:13px;">${localDesc}</span>
           <span style="font-weight:700;color:${NAVY};font-size:13px;">${fmtLineAmount(item.amount)}</span>
         </div>`;
     }
   } else {
     const desc = isAr
-      ? `رسوم الإقامة — ${invoice.room_type}`
+      ? `رسوم الإقامة — ${localizedProperty}`
       : `Stay Charges - ${invoice.room_type}`;
     itemsHtml = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;">
@@ -218,7 +253,7 @@ function buildInvoiceHtml(
         <div>
           <div style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;">${billedToLabel}</div>
           <div style="font-size:14px;font-weight:700;">${invoice.guest_name}</div>
-          <div style="font-size:11px;color:#888;margin-top:2px;">${invoice.room_type}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px;">${localizedProperty}</div>
         </div>
         <!-- Issue Date -->
         <div style="${textEnd};">

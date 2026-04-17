@@ -49,32 +49,32 @@ export const Confirmation: React.FC = () => {
   const isDayUse = booking.check_in === booking.check_out;
   const lang = i18n.language;
   const isFullDay = isDayUse && (!booking.slot_name || /full\s*day/i.test(booking.slot_name));
+  const localizedProperty = lang === 'ar' ? 'محمية النخيل' : propertyName;
 
   const stayLabel = (() => {
     if (isDayUse) {
       if (isFullDay) {
         const fullDayLabel = lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Full Day';
-        return `${fullDayLabel} — ${propertyName}`;
+        return `${fullDayLabel} — ${localizedProperty}`;
       }
-      // Partial slot — use specific slot name when available, else generic "partial"
       const slotDisplay = booking.slot_name
         ? (lang === 'ar' && booking.slot_name_ar ? booking.slot_name_ar : booking.slot_name)
         : (lang === 'ar' ? 'حجز جزئي' : 'Partial Booking');
-      return `${slotDisplay} — ${propertyName}`;
+      return `${slotDisplay} — ${localizedProperty}`;
     }
     const nightWord = lang === 'ar'
       ? (booking.nights > 1 ? t('common.nights') : t('common.night'))
       : (booking.nights > 1 ? 'Nights' : 'Night');
-    return `${booking.nights} ${nightWord} — ${propertyName}`;
+    return `${booking.nights} ${nightWord} — ${localizedProperty}`;
   })();
 
   const handleViewInvoice = async () => {
     try {
-      const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
+      const depositLabel = lang === 'ar' ? 'مبلغ التأمين المسترد' : 'Refundable Security Deposit';
       const pdfDoc = await generateInvoicePDF({
         id: booking.id,
         guest_name: booking.guest_name,
-        room_type: propertyName,
+        room_type: localizedProperty,
         issued_date: booking.created_at,
         subtotal: grandTotal,
         vat_amount: 0,

@@ -60,24 +60,38 @@ export const Invoices: React.FC = () => {
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
+    const lang = i18n.language;
+    const isAr = lang === 'ar';
+    const propName = isAr ? 'محمية النخيل' : b.property_name;
     const deposit = Number(b.depositAmount) || Number(b.security_deposit) || 0;
     const stayTotal = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
     const total = Number(b.grandTotal) || Number(b.total_amount) || (stayTotal + deposit);
     const isDayUse = b.check_in === b.check_out;
-    const stayLabel = isDayUse
-      ? (b.slot_name ? `${b.slot_name} — ${b.property_name}` : `Day Use — ${b.property_name}`)
-      : `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`;
+    const isFullDay = isDayUse && (!b.slot_name || /full\s*day/i.test(b.slot_name));
+    let stayLabel: string;
+    if (isDayUse) {
+      if (isFullDay) {
+        stayLabel = isAr ? `يوم كامل بدون مبيت — ${propName}` : `Full Day — ${b.property_name}`;
+      } else {
+        const slotDisplay = isAr && b.slot_name_ar ? b.slot_name_ar : (b.slot_name || (isAr ? 'حجز جزئي' : 'Partial Booking'));
+        stayLabel = `${slotDisplay} — ${propName}`;
+      }
+    } else {
+      const nightWord = isAr ? (b.nights > 1 ? 'ليالٍ' : 'ليلة') : (b.nights > 1 ? 'Nights' : 'Night');
+      stayLabel = `${b.nights} ${nightWord} — ${propName}`;
+    }
+    const depositLabel = isAr ? 'مبلغ التأمين المسترد' : 'Refundable Security Deposit';
     const items: Invoice['items'] = [
       { id: 1, invoice_id: b.id, description: stayLabel, amount: stayTotal },
     ];
     if (deposit > 0) {
-      items.push({ id: 2, invoice_id: b.id, description: 'Refundable Security Deposit', amount: deposit });
+      items.push({ id: 2, invoice_id: b.id, description: depositLabel, amount: deposit });
     }
     return {
       id: b.id,
       guest_name: b.guest_name,
       booking_ref: b.id.slice(0, 8).toUpperCase(),
-      room_type: b.property_name,
+      room_type: propName,
       subtotal: total,
       vat_amount: 0,
       total_amount: total,
