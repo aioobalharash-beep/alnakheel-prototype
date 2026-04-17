@@ -83,7 +83,16 @@
     "recentTransactions": "المعاملات الأخيرة",
     "noTransactions": "لا توجد معاملات بعد",
     "noUpcoming": "لا توجد حجوزات قادمة",
-    "revenue": "الإيرادات"
+    "revenue": "الإيرادات",
+    "bookingsLabel": "حجوزات",
+    "tapToCompare": "مقارنة",
+    "monthlyComparison": "مقارنة شهرية",
+    "currentVsPrevious": "أداء الشهر الحالي مقارنة بالشهر السابق",
+    "currentMonth": "الشهر الحالي",
+    "thisMonth": "هذا الشهر",
+    "lastMonth": "الشهر السابق",
+    "occupancy": "نسبة الإشغال",
+    "fromLastMonth": "عن الشهر السابق"
   },
   "guests": {
     "guestManagement": "إدارة الضيوف",
