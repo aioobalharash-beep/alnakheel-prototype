@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { OptimizedImage } from './OptimizedImage';
 import { ArrowLeft, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText, Languages } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -261,7 +262,7 @@ export const PropertyEditor: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {form.gallery.map((img, i) => (
             <div key={i} className="relative group aspect-[4/5] rounded-xl overflow-hidden bg-primary-navy/5">
-              <img src={img.url} alt={img.label} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <OptimizedImage src={img.url} alt={img.label} className="w-full h-full" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
                 <button onClick={() => removeImage(i)} className="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow-lg"><X size={14} className="text-red-500" /></button>
               </div>

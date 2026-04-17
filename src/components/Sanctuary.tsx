@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle, Bed, Bath, Car, Wifi, Wind, Flame, Waves, TreePalm, Shield, Star, Coffee, Utensils, Tv, Dumbbell, Baby } from 'lucide-react';
+import { OptimizedImage } from './OptimizedImage';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
@@ -123,14 +124,11 @@ export const Sanctuary: React.FC = () => {
               transition={{ delay: i * 0.1 }}
               className="flex-none w-[85vw] md:w-[600px] snap-center"
             >
-              <div className="aspect-[4/5] md:aspect-video rounded-[20px] overflow-hidden bg-primary-navy/5 shadow-sm">
-                <img
-                  src={img.url}
-                  alt={img.label}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
+              <OptimizedImage
+                src={img.url}
+                alt={img.label}
+                className="aspect-[4/5] md:aspect-video rounded-[20px] bg-primary-navy/5 shadow-sm"
+              />
               <p className="mt-3 font-bold text-primary-navy/80 text-sm px-1">{img.label}</p>
             </motion.div>
           ))}
