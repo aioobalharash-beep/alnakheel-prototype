@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircle, Pin, Check, Ban, Paperclip } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -62,7 +62,6 @@ export const Guests: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightName = searchParams.get('highlight');
   const highlightId = searchParams.get('id');
-  const highlightedRef = useRef<HTMLDivElement>(null);
 
   const [rawBookings, setRawBookings] = useState<BookingGuest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,14 +152,41 @@ export const Guests: React.FC = () => {
     completed: rawBookings.filter(g => g.displayStatus === 'completed').length,
   }), [rawBookings]);
 
-  // Scroll to highlighted guest (by name or booking id)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
+  // Deep-link scroll: wait for data to load, find the card by DOM id, scroll + highlight
   useEffect(() => {
-    if (!loading && (highlightName || highlightId) && highlightedRef.current) {
-      highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const timer = setTimeout(() => setSearchParams({}, { replace: true }), 3000);
-      return () => clearTimeout(timer);
+    if (loading || !highlightId) return;
+
+    // Ensure the card is in the filtered list — switch to 'all' if needed
+    const inCurrentList = guests.some(g => g.id === highlightId);
+    if (!inCurrentList && activeFilter !== 'all') {
+      setActiveFilter('all');
+      return; // will re-trigger after filter change
     }
-  }, [loading, highlightName, highlightId, guests]);
+
+    setHighlightedId(highlightId);
+
+    // Use rAF + small timeout to ensure DOM has painted the cards
+    const raf = requestAnimationFrame(() => {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`guest-card-${highlightId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        // Clear params after 3s, remove highlight after 4s
+        const clearTimer = setTimeout(() => {
+          setSearchParams({}, { replace: true });
+        }, 3000);
+        const fadeTimer = setTimeout(() => {
+          setHighlightedId(null);
+        }, 4000);
+        return () => { clearTimeout(clearTimer); clearTimeout(fadeTimer); };
+      }, 150);
+      return () => clearTimeout(timer);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [loading, highlightId, guests, activeFilter]);
 
   const handleApprove = async (bookingId: string) => {
     try {
@@ -297,20 +323,20 @@ export const Guests: React.FC = () => {
           <p className="text-center text-sm text-primary-navy/40 py-12">{t('guests.noGuestsFound')}</p>
         ) : (
           guests.map((guest, i) => {
-            const isHighlighted = (highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase()) || (highlightId && guest.id === highlightId);
+            const isHighlighted = highlightedId === guest.id || (highlightName && guest.guest_name.toLowerCase() === highlightName.toLowerCase());
             const cfg = STATUS_CONFIG[guest.displayStatus];
             const isActive = guest.displayStatus !== 'completed';
 
             return (
               <motion.div
                 key={guest.id}
-                ref={isHighlighted ? highlightedRef : undefined}
+                id={`guest-card-${guest.id}`}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.06 }}
                 className={cn(
                   "bg-white p-5 rounded-xl shadow-sm border space-y-4 transition-all duration-500",
-                  isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg" :
+                  isHighlighted ? "border-secondary-gold ring-2 ring-secondary-gold/40 shadow-lg shadow-secondary-gold/10 bg-secondary-gold/[0.02]" :
                   guest.isPinned ? "border-secondary-gold/40 bg-secondary-gold/[0.03]" :
                   "border-primary-navy/5"
                 )}
