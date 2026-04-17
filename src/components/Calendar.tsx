@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown, X } from 'lucide-react';
@@ -28,6 +28,130 @@ interface RealtimeBooking {
   slot_start_time?: string;
   slot_end_time?: string;
 }
+
+interface CompareModalProps {
+  show: boolean;
+  onClose: () => void;
+  monthName: string;
+  currentMonthBookings: RealtimeBooking[];
+  prevMonthBookings: RealtimeBooking[];
+  occupancyPct: number;
+  prevOccupancyPct: number;
+  currentRevenue: number;
+  prevRevenue: number;
+  bookingGrowth: number;
+  revenueGrowth: number;
+  t: (key: string) => string;
+}
+
+const CompareModal = React.memo<CompareModalProps>(({
+  show, onClose, monthName,
+  currentMonthBookings, prevMonthBookings,
+  occupancyPct, prevOccupancyPct,
+  currentRevenue, prevRevenue,
+  bookingGrowth, revenueGrowth, t,
+}) => {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-[24px] w-full max-w-md shadow-2xl overflow-hidden"
+      >
+        <div className="p-6 border-b border-primary-navy/5 flex justify-between items-center">
+          <div>
+            <h3 className="font-headline text-lg font-bold text-primary-navy">{t('calendar.monthlyComparison')}</h3>
+            <p className="text-xs text-primary-navy/50 font-medium">{t('calendar.currentVsPrevious')}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-primary-navy/5 rounded-full">
+            <X size={18} className="text-primary-navy/40" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="text-center space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('calendar.currentMonth')}</p>
+            <p className="font-headline text-lg font-bold text-primary-navy">{monthName}</p>
+          </div>
+
+          <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.totalBookings')}</span>
+              <div className="flex items-center gap-1">
+                {bookingGrowth !== 0 && (
+                  <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", bookingGrowth > 0 ? "text-emerald-600" : "text-red-500")}>
+                    {bookingGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                    {bookingGrowth > 0 ? '+' : ''}{bookingGrowth}%
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
+                <p className="font-headline text-2xl font-bold text-primary-navy">{currentMonthBookings.length}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.thisMonth')}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
+                <p className="font-headline text-2xl font-bold text-primary-navy/50">{prevMonthBookings.length}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.lastMonth')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.occupancy')}</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-baseline gap-1">
+                  <span className="font-headline text-xl font-bold text-secondary-gold">{occupancyPct}%</span>
+                </div>
+                <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${occupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} className="h-full bg-secondary-gold rounded-full" />
+                </div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.thisMonth')}</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline gap-1">
+                  <span className="font-headline text-xl font-bold text-primary-navy/40">{prevOccupancyPct}%</span>
+                </div>
+                <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${prevOccupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }} className="h-full bg-primary-navy/30 rounded-full" />
+                </div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.lastMonth')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-primary-navy rounded-xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t('calendar.revenue')}</span>
+              {revenueGrowth !== 0 && (
+                <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", revenueGrowth > 0 ? "text-emerald-400" : "text-red-400")}>
+                  {revenueGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                  {revenueGrowth > 0 ? '+' : ''}{revenueGrowth}% {t('calendar.fromLastMonth')}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="font-headline text-xl font-bold text-secondary-gold">{currentRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.thisMonth')} (OMR)</p>
+              </div>
+              <div>
+                <p className="font-headline text-xl font-bold text-white/40">{prevRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.lastMonth')} (OMR)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+});
+CompareModal.displayName = 'CompareModal';
 
 export const Calendar: React.FC = () => {
   const navigate = useNavigate();
@@ -163,6 +287,8 @@ export const Calendar: React.FC = () => {
     .sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime())
     .slice(0, 3);
 
+  const closeCompare = useCallback(() => setShowCompare(false), []);
+
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
     else setCurrentMonth(currentMonth - 1);
@@ -227,110 +353,21 @@ export const Calendar: React.FC = () => {
         </motion.div>
       </section>
 
-      {/* Compare Modal */}
       <AnimatePresence>
-        {showCompare && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowCompare(false)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[24px] w-full max-w-md shadow-2xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-primary-navy/5 flex justify-between items-center">
-                <div>
-                  <h3 className="font-headline text-lg font-bold text-primary-navy">{t('calendar.monthlyComparison')}</h3>
-                  <p className="text-xs text-primary-navy/50 font-medium">{t('calendar.currentVsPrevious')}</p>
-                </div>
-                <button onClick={() => setShowCompare(false)} className="p-2 hover:bg-primary-navy/5 rounded-full">
-                  <X size={18} className="text-primary-navy/40" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6">
-                {/* Current Month Header */}
-                <div className="text-center space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('calendar.currentMonth')}</p>
-                  <p className="font-headline text-lg font-bold text-primary-navy">{monthName}</p>
-                </div>
-
-                {/* Bookings Comparison */}
-                <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.totalBookings')}</span>
-                    <div className="flex items-center gap-1">
-                      {bookingGrowth !== 0 && (
-                        <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", bookingGrowth > 0 ? "text-emerald-600" : "text-red-500")}>
-                          {bookingGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                          {bookingGrowth > 0 ? '+' : ''}{bookingGrowth}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
-                      <p className="font-headline text-2xl font-bold text-primary-navy">{currentMonthBookings.length}</p>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.thisMonth')}</p>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
-                      <p className="font-headline text-2xl font-bold text-primary-navy/50">{prevMonthBookings.length}</p>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.lastMonth')}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Occupancy Comparison */}
-                <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.occupancy')}</span>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline text-xl font-bold text-secondary-gold">{occupancyPct}%</span>
-                      </div>
-                      <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${occupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} className="h-full bg-secondary-gold rounded-full" />
-                      </div>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.thisMonth')}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline text-xl font-bold text-primary-navy/40">{prevOccupancyPct}%</span>
-                      </div>
-                      <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${prevOccupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }} className="h-full bg-primary-navy/30 rounded-full" />
-                      </div>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.lastMonth')}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Revenue Comparison */}
-                <div className="bg-primary-navy rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t('calendar.revenue')}</span>
-                    {revenueGrowth !== 0 && (
-                      <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", revenueGrowth > 0 ? "text-emerald-400" : "text-red-400")}>
-                        {revenueGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {revenueGrowth > 0 ? '+' : ''}{revenueGrowth}% {t('calendar.fromLastMonth')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="font-headline text-xl font-bold text-secondary-gold">{currentRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.thisMonth')} (OMR)</p>
-                    </div>
-                    <div>
-                      <p className="font-headline text-xl font-bold text-white/40">{prevRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.lastMonth')} (OMR)</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        <CompareModal
+          show={showCompare}
+          onClose={closeCompare}
+          monthName={monthName}
+          currentMonthBookings={currentMonthBookings}
+          prevMonthBookings={prevMonthBookings}
+          occupancyPct={occupancyPct}
+          prevOccupancyPct={prevOccupancyPct}
+          currentRevenue={currentRevenue}
+          prevRevenue={prevRevenue}
+          bookingGrowth={bookingGrowth}
+          revenueGrowth={revenueGrowth}
+          t={t}
+        />
       </AnimatePresence>
 
       <motion.section

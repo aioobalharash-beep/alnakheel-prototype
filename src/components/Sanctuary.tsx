@@ -55,6 +55,22 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Users, Ruler, Bed, Bath, Car, Wifi, Wind, Flame, Waves, TreePalm, Shield, Star, Coffee, Utensils, Tv, Dumbbell, Baby,
 };
 
+interface QuickFactCardProps {
+  iconKey: string;
+  label: string;
+}
+
+const QuickFactCard = React.memo<QuickFactCardProps>(({ iconKey, label }) => {
+  const IconComp = ICON_MAP[iconKey] || Star;
+  return (
+    <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
+      <IconComp className="text-secondary-gold mb-2" size={20} />
+      <p className="font-headline text-sm font-bold">{label}</p>
+    </div>
+  );
+});
+QuickFactCard.displayName = 'QuickFactCard';
+
 export const Sanctuary: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -87,18 +103,33 @@ export const Sanctuary: React.FC = () => {
           <div className="h-8 bg-primary-navy/5 rounded w-64" />
           <div className="flex gap-4 overflow-hidden">
             {[1, 2, 3].map(i => (
-              <div key={i} className="flex-none w-[85vw] md:w-[600px] aspect-[4/5] md:aspect-video rounded-[20px] bg-primary-navy/5" />
+              <div key={i} className="flex-none w-[85vw] md:w-[600px]">
+                <div className="aspect-[4/5] md:aspect-video rounded-[20px] bg-primary-navy/5" />
+                <div className="mt-3 h-3.5 bg-primary-navy/5 rounded w-40 mx-1" />
+              </div>
             ))}
           </div>
         </div>
-        <div className="px-6 grid grid-cols-2 gap-4">
-          <div className="h-24 bg-primary-navy/5 rounded-[20px]" />
-          <div className="h-24 bg-primary-navy/5 rounded-[20px]" />
+        <div className="px-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white p-5 rounded-[20px] border border-primary-navy/5 space-y-3">
+              <div className="h-5 w-5 bg-primary-navy/5 rounded" />
+              <div className="h-3.5 bg-primary-navy/5 rounded w-20" />
+            </div>
+          ))}
         </div>
         <div className="px-6 space-y-3">
           <div className="h-6 bg-primary-navy/5 rounded w-48" />
           <div className="h-4 bg-primary-navy/5 rounded w-full" />
           <div className="h-4 bg-primary-navy/5 rounded w-3/4" />
+        </div>
+        <div className="px-6 grid grid-cols-2 gap-y-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="h-4 w-4 bg-primary-navy/5 rounded-full" />
+              <div className="h-3 bg-primary-navy/5 rounded w-24" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -140,13 +171,9 @@ export const Sanctuary: React.FC = () => {
         {data.quickFacts && data.quickFacts.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {data.quickFacts.map((fact, i) => {
-              const IconComp = ICON_MAP[fact.icon] || Star;
               const displayLabel = lang === 'ar' && fact.label_ar ? fact.label_ar : fact.label;
               return (
-                <div key={i} className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
-                  <IconComp className="text-secondary-gold mb-2" size={20} />
-                  <p className="font-headline text-sm font-bold">{displayLabel}</p>
-                </div>
+                <QuickFactCard key={i} iconKey={fact.icon} label={displayLabel} />
               );
             })}
           </div>

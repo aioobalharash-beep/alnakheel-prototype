@@ -4,7 +4,7 @@ import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircl
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { propertiesApi } from '../services/api';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { firestoreBookings } from '../services/firestore';
 import type { Property } from '../types';
@@ -75,6 +75,11 @@ export const Guests: React.FC = () => {
   // Receipt viewer
   const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
 
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
+  const [hasMore, setHasMore] = useState(true);
+
   // Add guest modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -87,10 +92,11 @@ export const Guests: React.FC = () => {
   const [receiptFileName, setReceiptFileName] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-  // Real-time bookings from Firestore
+  // Real-time bookings from Firestore with pagination
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'), limit(pageLimit));
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasMore(snapshot.docs.length >= pageLimit);
       const guests = snapshot.docs
         .map(d => {
           const data = d.data();
@@ -125,7 +131,7 @@ export const Guests: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [pageLimit]);
 
   useEffect(() => {
     propertiesApi.list().then(setProperties).catch(console.error);
@@ -378,7 +384,26 @@ export const Guests: React.FC = () => {
       <section className="space-y-4">
         {loading ? (
           <div className="space-y-4 animate-pulse">
-            {[1, 2, 3].map(i => <div key={i} className="h-44 bg-primary-navy/5 rounded-xl" />)}
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white p-5 rounded-xl border border-primary-navy/5 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-primary-navy/5 rounded w-36" />
+                    <div className="h-3 bg-primary-navy/5 rounded w-24" />
+                  </div>
+                  <div className="h-6 bg-primary-navy/5 rounded-full w-20" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-3 bg-primary-navy/5 rounded w-32" />
+                  <div className="h-3 bg-primary-navy/5 rounded w-20" />
+                  <div className="h-3 bg-primary-navy/5 rounded w-16" />
+                </div>
+                <div className="flex gap-3 pt-4 border-t border-primary-navy/5">
+                  <div className="h-9 bg-primary-navy/5 rounded-lg flex-1" />
+                  <div className="h-9 bg-primary-navy/5 rounded-lg flex-1" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : guests.length === 0 ? (
           <p className="text-center text-sm text-primary-navy/40 py-12">{t('guests.noGuestsFound')}</p>
@@ -537,6 +562,14 @@ export const Guests: React.FC = () => {
               </motion.div>
             );
           })
+        )}
+        {!loading && hasMore && guests.length > 0 && (
+          <button
+            onClick={() => setPageLimit(prev => prev + PAGE_SIZE)}
+            className="w-full py-3 text-sm font-bold text-secondary-gold hover:text-primary-navy bg-white rounded-xl border border-primary-navy/5 shadow-sm transition-colors"
+          >
+            {t('common.loadMore')}
+          </button>
         )}
       </section>
 
