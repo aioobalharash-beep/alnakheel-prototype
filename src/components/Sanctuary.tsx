@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle } from 'lucide-react';
+import { Users, Ruler, CheckCircle2, Calendar as CalendarIcon, Instagram, MessageCircle, Bed, Bath, Car, Wifi, Wind, Flame, Waves, TreePalm, Shield, Star, Coffee, Utensils, Tv, Dumbbell, Baby } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +32,7 @@ interface PropertyDetails {
   features_ar?: string[];
   gallery: { url: string; label: string }[];
   pricing?: PricingSettings;
+  quickFacts?: { icon: string; label: string; label_ar: string }[];
 }
 
 const DEFAULTS: PropertyDetails = {
@@ -47,6 +48,10 @@ const DEFAULTS: PropertyDetails = {
     { url: 'https://picsum.photos/seed/oman-bedroom-2/800/1000', label: 'Guest Wing: Golden Hour' },
     { url: 'https://picsum.photos/seed/oman-kitchen/800/1000', label: 'Culinary Studio' },
   ],
+};
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Users, Ruler, Bed, Bath, Car, Wifi, Wind, Flame, Waves, TreePalm, Shield, Star, Coffee, Utensils, Tv, Dumbbell, Baby,
 };
 
 export const Sanctuary: React.FC = () => {
@@ -133,17 +138,34 @@ export const Sanctuary: React.FC = () => {
       </section>
 
       {/* Stats */}
-      <section className="px-6 grid grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
-          <Users className="text-secondary-gold mb-2" size={20} />
-          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.capacity')}</p>
-          <p className="font-headline text-lg font-bold">{data.capacity} {t('common.guests')}</p>
-        </div>
-        <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
-          <Ruler className="text-secondary-gold mb-2" size={20} />
-          <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.area')}</p>
-          <p className="font-headline text-lg font-bold">{data.area_sqm} m&sup2;</p>
-        </div>
+      <section className="px-6">
+        {data.quickFacts && data.quickFacts.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {data.quickFacts.map((fact, i) => {
+              const IconComp = ICON_MAP[fact.icon] || Star;
+              const displayLabel = lang === 'ar' && fact.label_ar ? fact.label_ar : fact.label;
+              return (
+                <div key={i} className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
+                  <IconComp className="text-secondary-gold mb-2" size={20} />
+                  <p className="font-headline text-sm font-bold">{displayLabel}</p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
+              <Users className="text-secondary-gold mb-2" size={20} />
+              <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.capacity')}</p>
+              <p className="font-headline text-lg font-bold">{data.capacity} {t('common.guests')}</p>
+            </div>
+            <div className="bg-white p-5 rounded-[20px] border border-primary-navy/5 shadow-sm">
+              <Ruler className="text-secondary-gold mb-2" size={20} />
+              <p className="text-[10px] text-primary-navy/50 font-bold uppercase tracking-wider mb-1">{t('sanctuary.area')}</p>
+              <p className="font-headline text-lg font-bold">{data.area_sqm} m&sup2;</p>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Description */}

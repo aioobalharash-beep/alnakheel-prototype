@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2 } from 'lucide-react';
+import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
@@ -44,6 +44,26 @@ export const Invoices: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<RealtimeBooking | null>(null);
+  const [whatsappTemplate, setWhatsappTemplate] = useState<string>(
+    `Assalamu Alaikum {{guest_name}},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nBooking Ref: {{booking_id}}\nStay: {{stay_amount}} OMR\n{{deposit_line}}\nTotal: {{total_amount}} OMR\n{{receipt_line}}\n\nThank you for choosing Al-Nakheel.`
+  );
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+
+  // Load WhatsApp template from Firestore on mount
+  useEffect(() => {
+    const loadTemplate = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'notifications'));
+        if (snap.exists() && snap.data().whatsappTemplate) {
+          setWhatsappTemplate(snap.data().whatsappTemplate);
+        }
+      } catch (err) {
+        console.error('Failed to load WhatsApp template:', err);
+      }
+    };
+    loadTemplate();
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
@@ -163,13 +183,14 @@ export const Invoices: React.FC = () => {
     const stayAmount = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
     const total = Number(b.grandTotal) || Number(b.total_amount) || (stayAmount + deposit);
     const receiptLink = b.receiptURL || '';
-    const message = encodeURIComponent(
-      `Assalamu Alaikum ${b.guest_name},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nStay: ${stayAmount.toFixed(2)} OMR`
-      + (deposit > 0 ? `\nRefundable Deposit: ${deposit.toFixed(2)} OMR` : '')
-      + `\nTotal: ${total.toFixed(2)} OMR`
-      + (receiptLink ? `\n\nReceipt: ${receiptLink}` : '')
-      + `\n\nThank you for choosing Al-Nakheel.`
-    );
+    const rendered = whatsappTemplate
+      .replace(/\{\{guest_name\}\}/g, b.guest_name)
+      .replace(/\{\{booking_id\}\}/g, b.id.slice(0, 8).toUpperCase())
+      .replace(/\{\{stay_amount\}\}/g, stayAmount.toFixed(2))
+      .replace(/\{\{deposit_line\}\}/g, deposit > 0 ? `Refundable Deposit: ${deposit.toFixed(2)} OMR` : '')
+      .replace(/\{\{total_amount\}\}/g, total.toFixed(2))
+      .replace(/\{\{receipt_line\}\}/g, receiptLink ? `Receipt: ${receiptLink}` : '');
+    const message = encodeURIComponent(rendered);
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
   };
 
@@ -190,6 +211,51 @@ export const Invoices: React.FC = () => {
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Administration</span>
         <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">{t('invoices.invoiceCenter')}</h1>
         <p className="text-primary-navy/50 text-xs font-medium mt-1">{nonCancelledBookings.length} total invoices generated</p>
+      </div>
+
+      {/* WhatsApp Template Editor */}
+      <div className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
+        <button
+          onClick={() => setShowTemplateEditor(!showTemplateEditor)}
+          className="flex items-center gap-2 text-sm font-bold text-primary-navy hover:text-secondary-gold transition-colors"
+        >
+          <Edit3 size={16} />
+          Edit WhatsApp Template
+        </button>
+
+        {showTemplateEditor && (
+          <div className="space-y-3">
+            <textarea
+              value={whatsappTemplate}
+              onChange={(e) => setWhatsappTemplate(e.target.value)}
+              rows={10}
+              className="w-full border border-primary-navy/10 rounded-xl p-4 text-sm text-primary-navy font-mono resize-y focus:outline-none focus:ring-2 focus:ring-secondary-gold/30 focus:border-secondary-gold/50"
+            />
+            <div className="flex flex-wrap gap-2">
+              {['{{guest_name}}', '{{booking_id}}', '{{stay_amount}}', '{{deposit_line}}', '{{total_amount}}', '{{receipt_line}}'].map((ph) => (
+                <span key={ph} className="text-[10px] font-mono bg-primary-navy/5 text-primary-navy/60 px-2 py-1 rounded-md">{ph}</span>
+              ))}
+            </div>
+            <p className="text-[10px] text-primary-navy/40 font-medium">
+              Use the placeholders above in your template. They will be replaced with actual booking data when sending.
+            </p>
+            <button
+              onClick={async () => {
+                setTemplateSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'notifications'), { whatsappTemplate }, { merge: true });
+                } catch (err) {
+                  console.error('Failed to save template:', err);
+                }
+                setTemplateSaving(false);
+              }}
+              disabled={templateSaving}
+              className="px-6 py-2.5 bg-primary-navy text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-primary-navy/90 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {templateSaving ? 'Saving...' : 'Save Template'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* SECTION 1: Latest Booking Invoices */}
