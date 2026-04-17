@@ -216,6 +216,8 @@ export const firestoreBookings = {
     depositAmount?: number;
     grandTotal?: number;
     payment_method: 'thawani' | 'bank_transfer' | 'walk_in';
+    payment_mode?: 'paid' | 'free';
+    amount_paid?: number;
     receipt_image?: string;
     receiptURL?: string;
     slot_id?: string;
@@ -232,10 +234,22 @@ export const firestoreBookings = {
     // Use explicit pricing values from the pricing engine when available
     const stayTotal = Number(data.stayTotal) || (data.nightly_rate * nights);
     const depositAmount = Number(data.depositAmount) || Number(data.security_deposit) || 0;
-    const grandTotal = Number(data.grandTotal) || (stayTotal + depositAmount);
-
-    const isBankTransfer = data.payment_method === 'bank_transfer';
     const isWalkIn = data.payment_method === 'walk_in';
+    const isBankTransfer = data.payment_method === 'bank_transfer';
+    const isFreeWalkIn = isWalkIn && data.payment_mode === 'free';
+    // Walk-in: grandTotal reflects amount_paid (paid) or 0 (free). Online flows use explicit grandTotal.
+    const grandTotal = isWalkIn
+      ? (isFreeWalkIn ? 0 : Number(data.amount_paid) || 0)
+      : (Number(data.grandTotal) || (stayTotal + depositAmount));
+
+    // payment_status: free → 'free', paid walk-in → 'paid', bank_transfer → 'pending',
+    // thawani → 'paid'. Walk-in falls back to 'pending' if no mode set.
+    let paymentStatus: string;
+    if (isFreeWalkIn) paymentStatus = 'free';
+    else if (isWalkIn && data.payment_mode === 'paid') paymentStatus = 'paid';
+    else if (isBankTransfer) paymentStatus = 'pending';
+    else if (isWalkIn) paymentStatus = 'pending';
+    else paymentStatus = 'paid';
 
     const booking: Omit<FirestoreBooking, 'id'> = {
       property_id: data.property_id,
@@ -249,11 +263,11 @@ export const firestoreBookings = {
       nightly_rate: data.nightly_rate,
       security_deposit: depositAmount,
       total_amount: grandTotal,
-      stayTotal,
-      depositAmount,
+      stayTotal: isWalkIn ? grandTotal : stayTotal,
+      depositAmount: isWalkIn ? 0 : depositAmount,
       grandTotal,
       status: isBankTransfer ? 'pending' : 'confirmed',
-      payment_status: isBankTransfer ? 'pending' : (isWalkIn ? 'pending' : 'paid'),
+      payment_status: paymentStatus,
       payment_method: data.payment_method,
       receipt_image: data.receipt_image || '',
       receiptURL: data.receiptURL || '',
@@ -286,8 +300,8 @@ export const firestoreBookings = {
       created_at: new Date().toISOString(),
     });
 
-    // Create a transaction record (only for non-bank-transfer)
-    if (!isBankTransfer) {
+    // Create a transaction record only when money was actually collected
+    if (paymentStatus === 'paid') {
       await addDoc(transactionsCol(), {
         type: 'payment',
         description: `Booking Payment - ${data.property_name}`,

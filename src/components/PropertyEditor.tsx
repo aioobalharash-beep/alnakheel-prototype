@@ -26,6 +26,7 @@ interface PropertyDetails {
   iban: string;
   bankPhone: string;
   termsOfStay: BilingualField;
+  quickFacts?: { icon: string; label: string; label_ar: string }[];
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -88,6 +89,9 @@ export const PropertyEditor: React.FC = () => {
   const [newSlotStart, setNewSlotStart] = useState('11:00');
   const [newSlotEnd, setNewSlotEnd] = useState('16:00');
   const [newFeatureAr, setNewFeatureAr] = useState('');
+  const [newFactIcon, setNewFactIcon] = useState('');
+  const [newFactLabel, setNewFactLabel] = useState('');
+  const [newFactLabelAr, setNewFactLabelAr] = useState('');
 
   // Helpers to update pricing sub-object
   const setPricing = (patch: Partial<PricingSettings>) =>
@@ -173,6 +177,22 @@ export const PropertyEditor: React.FC = () => {
   };
 
   const removeImage = (i: number) => setForm(prev => ({ ...prev, gallery: prev.gallery.filter((_, j) => j !== i) }));
+
+  const addQuickFact = () => {
+    const label = newFactLabel.trim();
+    if (!label) return;
+    setForm(prev => ({
+      ...prev,
+      quickFacts: [...(prev.quickFacts || []), { icon: newFactIcon || 'Star', label, label_ar: newFactLabelAr.trim() }],
+    }));
+    setNewFactIcon('');
+    setNewFactLabel('');
+    setNewFactLabelAr('');
+  };
+  const removeQuickFact = (i: number) => setForm(prev => ({
+    ...prev,
+    quickFacts: (prev.quickFacts || []).filter((_, j) => j !== i),
+  }));
 
   const addFeature = () => {
     const t = newFeature.trim();
@@ -628,6 +648,38 @@ export const PropertyEditor: React.FC = () => {
             <Languages size={12} /> Summary Text (Arabic)
           </label>
           <textarea dir="rtl" value={form.description.ar} onChange={(e) => setForm(prev => ({ ...prev, description: { ...prev.description, ar: e.target.value } }))} rows={4} placeholder="أدخل الوصف بالعربية..." className={cn(inputClass, "leading-relaxed resize-none")} />
+        </div>
+      </section>
+
+      {/* Property Quick Facts */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
+        <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Property Quick Facts</h3>
+        <div className="space-y-2">
+          {(form.quickFacts || []).map((fact, i) => (
+            <div key={i} className="flex items-center gap-2 bg-pearl-white border border-primary-navy/10 rounded-xl px-4 py-2.5">
+              <span className="text-xs font-bold text-secondary-gold min-w-[60px]">{fact.icon}</span>
+              <span className="text-xs font-bold text-primary-navy min-w-[120px]">{fact.label}</span>
+              <span className="text-xs text-primary-navy/50 flex-1" dir="rtl">{fact.label_ar || '—'}</span>
+              <button onClick={() => removeQuickFact(i)} className="text-primary-navy/30 hover:text-red-500 transition-colors"><X size={14} /></button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <select
+            value={newFactIcon}
+            onChange={(e) => setNewFactIcon(e.target.value)}
+            className="w-36 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-3 text-xs font-bold focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+          >
+            <option value="">Icon (Star)</option>
+            {['Users', 'Ruler', 'Bed', 'Bath', 'Car', 'Wifi', 'Wind', 'Flame', 'Waves', 'TreePalm', 'Shield', 'Star', 'Coffee', 'Utensils', 'Tv', 'Dumbbell', 'Baby'].map(ic => (
+              <option key={ic} value={ic}>{ic}</option>
+            ))}
+          </select>
+          <input type="text" value={newFactLabel} onChange={(e) => setNewFactLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQuickFact()} placeholder="Label (English)" className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs placeholder:text-primary-navy/25 focus:ring-1 focus:ring-secondary-gold/50 outline-none" />
+          <input type="text" dir="rtl" value={newFactLabelAr} onChange={(e) => setNewFactLabelAr(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQuickFact()} placeholder="بالعربية (اختياري)" className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs placeholder:text-primary-navy/25 focus:ring-1 focus:ring-secondary-gold/50 outline-none" />
+          <button onClick={addQuickFact} disabled={!newFactLabel.trim()} className="px-4 py-2.5 bg-primary-navy/5 rounded-xl text-primary-navy/60 hover:bg-primary-navy/10 transition-colors disabled:opacity-30">
+            <Plus size={16} />
+          </button>
         </div>
       </section>
 

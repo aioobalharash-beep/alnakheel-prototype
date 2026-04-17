@@ -407,6 +407,7 @@ export const Booking: React.FC = () => {
             ...(selectedSlot ? {
               slot_id: selectedSlot.id,
               slot_name: selectedSlot.name,
+              slot_name_ar: selectedSlot.name_ar || '',
               slot_start_time: selectedSlot.start_time,
               slot_end_time: selectedSlot.end_time,
             } : {}),
@@ -476,6 +477,7 @@ export const Booking: React.FC = () => {
         ...(selectedSlot ? {
           slot_id: selectedSlot.id,
           slot_name: selectedSlot.name,
+          slot_name_ar: selectedSlot.name_ar || '',
           slot_start_time: selectedSlot.start_time,
           slot_end_time: selectedSlot.end_time,
         } : {}),
@@ -1095,7 +1097,7 @@ export const Booking: React.FC = () => {
                   {t('booking.iAccept')}
                 </button>
                 <button
-                  onClick={() => downloadTermsPDF(termsOfStay, lang)}
+                  onClick={async () => downloadTermsPDF(termsOfStay, lang)}
                   className="w-full border-2 border-primary-navy/10 text-primary-navy/60 py-3.5 rounded-[16px] font-bold text-[10px] uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:border-primary-navy/20 hover:text-primary-navy"
                 >
                   <Download size={14} />

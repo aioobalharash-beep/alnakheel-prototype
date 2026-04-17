@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2 } from 'lucide-react';
+import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3, Paperclip } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
@@ -44,6 +44,27 @@ export const Invoices: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<RealtimeBooking | null>(null);
+  const [whatsappTemplate, setWhatsappTemplate] = useState<string>(
+    `Assalamu Alaikum {{guest_name}},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nBooking Ref: {{booking_id}}\nStay: {{stay_amount}} OMR\n{{deposit_line}}\nTotal: {{total_amount}} OMR\n{{receipt_line}}\n\nThank you for choosing Al-Nakheel.`
+  );
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
+
+  // Load WhatsApp template from Firestore on mount
+  useEffect(() => {
+    const loadTemplate = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'notifications'));
+        if (snap.exists() && snap.data().whatsappTemplate) {
+          setWhatsappTemplate(snap.data().whatsappTemplate);
+        }
+      } catch (err) {
+        console.error('Failed to load WhatsApp template:', err);
+      }
+    };
+    loadTemplate();
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
@@ -60,24 +81,38 @@ export const Invoices: React.FC = () => {
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
+    const lang = i18n.language;
+    const isAr = lang === 'ar';
+    const propName = isAr ? 'محمية النخيل' : b.property_name;
     const deposit = Number(b.depositAmount) || Number(b.security_deposit) || 0;
     const stayTotal = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
     const total = Number(b.grandTotal) || Number(b.total_amount) || (stayTotal + deposit);
     const isDayUse = b.check_in === b.check_out;
-    const stayLabel = isDayUse
-      ? (b.slot_name ? `${b.slot_name} — ${b.property_name}` : `Day Use — ${b.property_name}`)
-      : `${b.nights} Night${b.nights > 1 ? 's' : ''} — ${b.property_name}`;
+    const isFullDay = isDayUse && (!b.slot_name || /full\s*day/i.test(b.slot_name));
+    let stayLabel: string;
+    if (isDayUse) {
+      if (isFullDay) {
+        stayLabel = isAr ? `يوم كامل بدون مبيت — ${propName}` : `Full Day — ${b.property_name}`;
+      } else {
+        const slotDisplay = isAr && b.slot_name_ar ? b.slot_name_ar : (b.slot_name || (isAr ? 'حجز جزئي' : 'Partial Booking'));
+        stayLabel = `${slotDisplay} — ${propName}`;
+      }
+    } else {
+      const nightWord = isAr ? (b.nights > 1 ? 'ليالٍ' : 'ليلة') : (b.nights > 1 ? 'Nights' : 'Night');
+      stayLabel = `${b.nights} ${nightWord} — ${propName}`;
+    }
+    const depositLabel = isAr ? 'مبلغ التأمين المسترد' : 'Refundable Security Deposit';
     const items: Invoice['items'] = [
       { id: 1, invoice_id: b.id, description: stayLabel, amount: stayTotal },
     ];
     if (deposit > 0) {
-      items.push({ id: 2, invoice_id: b.id, description: 'Refundable Security Deposit', amount: deposit });
+      items.push({ id: 2, invoice_id: b.id, description: depositLabel, amount: deposit });
     }
     return {
       id: b.id,
       guest_name: b.guest_name,
       booking_ref: b.id.slice(0, 8).toUpperCase(),
-      room_type: b.property_name,
+      room_type: propName,
       subtotal: total,
       vat_amount: 0,
       total_amount: total,
@@ -149,13 +184,14 @@ export const Invoices: React.FC = () => {
     const stayAmount = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
     const total = Number(b.grandTotal) || Number(b.total_amount) || (stayAmount + deposit);
     const receiptLink = b.receiptURL || '';
-    const message = encodeURIComponent(
-      `Assalamu Alaikum ${b.guest_name},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nStay: ${stayAmount.toFixed(2)} OMR`
-      + (deposit > 0 ? `\nRefundable Deposit: ${deposit.toFixed(2)} OMR` : '')
-      + `\nTotal: ${total.toFixed(2)} OMR`
-      + (receiptLink ? `\n\nReceipt: ${receiptLink}` : '')
-      + `\n\nThank you for choosing Al-Nakheel.`
-    );
+    const rendered = whatsappTemplate
+      .replace(/\{\{guest_name\}\}/g, b.guest_name)
+      .replace(/\{\{booking_id\}\}/g, b.id.slice(0, 8).toUpperCase())
+      .replace(/\{\{stay_amount\}\}/g, stayAmount.toFixed(2))
+      .replace(/\{\{deposit_line\}\}/g, deposit > 0 ? `Refundable Deposit: ${deposit.toFixed(2)} OMR` : '')
+      .replace(/\{\{total_amount\}\}/g, total.toFixed(2))
+      .replace(/\{\{receipt_line\}\}/g, receiptLink ? `Receipt: ${receiptLink}` : '');
+    const message = encodeURIComponent(rendered);
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
   };
 
@@ -176,6 +212,51 @@ export const Invoices: React.FC = () => {
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">Administration</span>
         <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">{t('invoices.invoiceCenter')}</h1>
         <p className="text-primary-navy/50 text-xs font-medium mt-1">{nonCancelledBookings.length} total invoices generated</p>
+      </div>
+
+      {/* WhatsApp Template Editor */}
+      <div className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
+        <button
+          onClick={() => setShowTemplateEditor(!showTemplateEditor)}
+          className="flex items-center gap-2 text-sm font-bold text-primary-navy hover:text-secondary-gold transition-colors"
+        >
+          <Edit3 size={16} />
+          Edit WhatsApp Template
+        </button>
+
+        {showTemplateEditor && (
+          <div className="space-y-3">
+            <textarea
+              value={whatsappTemplate}
+              onChange={(e) => setWhatsappTemplate(e.target.value)}
+              rows={10}
+              className="w-full border border-primary-navy/10 rounded-xl p-4 text-sm text-primary-navy font-mono resize-y focus:outline-none focus:ring-2 focus:ring-secondary-gold/30 focus:border-secondary-gold/50"
+            />
+            <div className="flex flex-wrap gap-2">
+              {['{{guest_name}}', '{{booking_id}}', '{{stay_amount}}', '{{deposit_line}}', '{{total_amount}}', '{{receipt_line}}'].map((ph) => (
+                <span key={ph} className="text-[10px] font-mono bg-primary-navy/5 text-primary-navy/60 px-2 py-1 rounded-md">{ph}</span>
+              ))}
+            </div>
+            <p className="text-[10px] text-primary-navy/40 font-medium">
+              Use the placeholders above in your template. They will be replaced with actual booking data when sending.
+            </p>
+            <button
+              onClick={async () => {
+                setTemplateSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'notifications'), { whatsappTemplate }, { merge: true });
+                } catch (err) {
+                  console.error('Failed to save template:', err);
+                }
+                setTemplateSaving(false);
+              }}
+              disabled={templateSaving}
+              className="px-6 py-2.5 bg-primary-navy text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-primary-navy/90 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {templateSaving ? 'Saving...' : 'Save Template'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* SECTION 1: Latest Booking Invoices */}
@@ -214,13 +295,27 @@ export const Invoices: React.FC = () => {
                 >
                   {/* Guest Name + Status Badge */}
                   <div className="col-span-4">
-                    <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-primary-navy text-sm">{b.guest_name}</p>
+                      {b.receiptURL && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setReceiptViewURL(b.receiptURL); }}
+                          title="View attached receipt"
+                          className="p-1 rounded-md text-secondary-gold hover:bg-secondary-gold/10 active:scale-90 transition-all"
+                        >
+                          <Paperclip size={12} />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={cn(
                         "text-[8px] font-bold uppercase px-2 py-0.5 rounded-full",
-                        status === 'sent' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                        b.payment_status === 'free' ? "bg-secondary-gold/10 text-secondary-gold" :
+                        status === 'sent' ? "bg-emerald-50 text-emerald-600" :
+                        "bg-amber-50 text-amber-600"
                       )}>
-                        {status}
+                        {b.payment_status === 'free' ? 'free' : status}
                       </span>
                       <span className="text-[10px] text-primary-navy/40 font-medium md:hidden">{b.property_name}</span>
                     </div>
@@ -331,6 +426,59 @@ export const Invoices: React.FC = () => {
         </div>
       </section>
 
+      {/* Receipt Viewer Modal */}
+      <AnimatePresence>
+        {receiptViewURL && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setReceiptViewURL(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[24px] w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-primary-navy/5">
+                <div className="flex items-center gap-2">
+                  <Paperclip size={16} className="text-secondary-gold" />
+                  <h3 className="font-headline font-bold text-primary-navy">Payment Receipt</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={receiptViewURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-primary-navy/5 text-primary-navy text-[10px] font-bold uppercase tracking-widest hover:bg-primary-navy/10 transition-all"
+                  >
+                    Open Full Size
+                  </a>
+                  <button onClick={() => setReceiptViewURL(null)} className="p-2 hover:bg-primary-navy/5 rounded-full">
+                    <X size={18} className="text-primary-navy/40" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-surface-container-low">
+                {receiptViewURL.toLowerCase().endsWith('.pdf') ? (
+                  <iframe src={receiptViewURL} className="w-full h-[60vh] rounded-lg border-0" title="Receipt PDF" />
+                ) : (
+                  <img
+                    src={receiptViewURL}
+                    alt="Payment Receipt"
+                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Invoice Preview Modal — only opens when a specific invoice is selected */}
       <AnimatePresence>
         {selectedInvoice && (
@@ -411,7 +559,7 @@ export const Invoices: React.FC = () => {
               <div className="p-5 bg-surface-container-low space-y-3 border-t border-primary-navy/5">
                 <div className="flex gap-3">
                   <button
-                    onClick={() => downloadInvoicePDF(selectedInvoice, i18n.language)}
+                    onClick={async () => downloadInvoicePDF(selectedInvoice, i18n.language)}
                     className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
                   >
                     <Download size={14} />

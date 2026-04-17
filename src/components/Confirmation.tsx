@@ -47,28 +47,49 @@ export const Confirmation: React.FC = () => {
   const grandTotal = Number(booking.grandTotal) || Number(booking.total_amount) || (stayTotal + deposit);
 
   const isDayUse = booking.check_in === booking.check_out;
-  const stayLabel = isDayUse
-    ? (booking.slot_name ? `${booking.slot_name} — ${propertyName}` : `Day Use — ${propertyName}`)
-    : `${booking.nights} Night${booking.nights > 1 ? 's' : ''} — ${propertyName}`;
+  const lang = i18n.language;
+  const isFullDay = isDayUse && (!booking.slot_name || /full\s*day/i.test(booking.slot_name));
+  const localizedProperty = lang === 'ar' ? 'محمية النخيل' : propertyName;
+
+  const stayLabel = (() => {
+    if (isDayUse) {
+      if (isFullDay) {
+        const fullDayLabel = lang === 'ar' ? 'يوم كامل بدون مبيت' : 'Full Day';
+        return `${fullDayLabel} — ${localizedProperty}`;
+      }
+      const slotDisplay = booking.slot_name
+        ? (lang === 'ar' && booking.slot_name_ar ? booking.slot_name_ar : booking.slot_name)
+        : (lang === 'ar' ? 'حجز جزئي' : 'Partial Booking');
+      return `${slotDisplay} — ${localizedProperty}`;
+    }
+    const nightWord = lang === 'ar'
+      ? (booking.nights > 1 ? t('common.nights') : t('common.night'))
+      : (booking.nights > 1 ? 'Nights' : 'Night');
+    return `${booking.nights} ${nightWord} — ${localizedProperty}`;
+  })();
 
   const handleViewInvoice = async () => {
-    const lang = i18n.language;
-    const depositLabel = lang === 'ar' ? 'تأمين مسترد' : 'Refundable Security Deposit';
-    const pdfDoc = await generateInvoicePDF({
-      id: booking.id,
-      guest_name: booking.guest_name,
-      room_type: propertyName,
-      issued_date: booking.created_at,
-      subtotal: grandTotal,
-      vat_amount: 0,
-      total_amount: grandTotal,
-      items: [
-        { description: stayLabel, amount: stayTotal },
-        ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
-      ],
-    }, lang);
-    const blobUrl = pdfDoc.output('bloburl');
-    window.open(blobUrl as string, '_blank');
+    try {
+      const depositLabel = lang === 'ar' ? 'مبلغ التأمين المسترد' : 'Refundable Security Deposit';
+      const pdfDoc = await generateInvoicePDF({
+        id: booking.id,
+        guest_name: booking.guest_name,
+        room_type: localizedProperty,
+        issued_date: booking.created_at,
+        subtotal: grandTotal,
+        vat_amount: 0,
+        total_amount: grandTotal,
+        items: [
+          { description: stayLabel, amount: stayTotal },
+          ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
+        ],
+      }, lang);
+      const blobUrl = pdfDoc.output('bloburl');
+      window.open(blobUrl as string, '_blank');
+    } catch (err) {
+      console.error('[Confirmation] Failed to generate invoice PDF:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء إنشاء الفاتورة.' : 'Failed to generate invoice.');
+    }
   };
 
   const handleLocationPin = () => {
@@ -120,13 +141,17 @@ export const Confirmation: React.FC = () => {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">{t('guests.checkIn')}</p>
               <p className="font-bold text-primary-navy text-sm">
-                {new Date(booking.check_in).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {new Date(booking.check_in).toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
             <div className="text-end">
               <p className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/40 mb-1">{t('confirmation.dates')}</p>
               <p className="font-bold text-primary-navy text-sm">
-                {isDayUse ? (booking.slot_name || t('common.dayUse')) : `${booking.nights} ${booking.nights > 1 ? t('common.nights') : t('common.night')}`}
+                {isDayUse
+                  ? isFullDay
+                    ? t('common.dayUse')
+                    : (lang === 'ar' && booking.slot_name_ar ? booking.slot_name_ar : (booking.slot_name || t('common.partialBooking')))
+                  : `${booking.nights} ${booking.nights > 1 ? t('common.nights') : t('common.night')}`}
               </p>
             </div>
           </div>
@@ -166,18 +191,18 @@ export const Confirmation: React.FC = () => {
               className="w-full bg-primary-navy text-white py-4 rounded-[20px] font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all shadow-lg shadow-primary-navy/15"
             >
               <FileText size={18} />
-              View Invoice
+              {t('confirmation.viewInvoice')}
             </button>
           )}
 
           {isBankTransfer && (
             <div className="bg-amber-50/60 border border-amber-200/60 rounded-[16px] px-5 py-4 space-y-2">
               <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
-                Your tax invoice will be generated once our team approves your bank transfer.
+                {t('confirmation.bankTransferPending')}
               </p>
               {bankPhone.trim() && (
                 <p className="text-xs text-amber-700/80 leading-relaxed font-medium">
-                  <span className="font-bold">Mobile Transfer (WhatsApp/Bank App):</span> {bankPhone}
+                  <span className="font-bold">{t('confirmation.mobileTransfer')}</span> {bankPhone}
                 </p>
               )}
             </div>
@@ -189,7 +214,7 @@ export const Confirmation: React.FC = () => {
             className="w-full bg-white border-2 border-secondary-gold text-secondary-gold py-4 rounded-[20px] font-bold text-sm flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all hover:bg-secondary-gold/5"
           >
             <MapPin size={18} />
-            Get Location Pin
+            {t('confirmation.getLocationPin')}
           </button>
 
           <button

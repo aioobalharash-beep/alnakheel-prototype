@@ -48,6 +48,7 @@
     "eveningOverview": "النظرة العامة",
     "totalRevenue": "إجمالي الإيرادات",
     "last30Days": "أداء آخر 30 يوماً",
+    "paidBookings": "من الحجوزات المؤكدة المدفوعة",
     "pendingBookings": "حجوزات معلقة",
     "actionRequired": "إجراء مطلوب",
     "chaletAvailability": "توفر الشاليه",
@@ -82,7 +83,16 @@
     "recentTransactions": "المعاملات الأخيرة",
     "noTransactions": "لا توجد معاملات بعد",
     "noUpcoming": "لا توجد حجوزات قادمة",
-    "revenue": "الإيرادات"
+    "revenue": "الإيرادات",
+    "bookingsLabel": "حجوزات",
+    "tapToCompare": "مقارنة",
+    "monthlyComparison": "مقارنة شهرية",
+    "currentVsPrevious": "أداء الشهر الحالي مقارنة بالشهر السابق",
+    "currentMonth": "الشهر الحالي",
+    "thisMonth": "هذا الشهر",
+    "lastMonth": "الشهر السابق",
+    "occupancy": "نسبة الإشغال",
+    "fromLastMonth": "عن الشهر السابق"
   },
   "guests": {
     "guestManagement": "إدارة الضيوف",
@@ -111,6 +121,13 @@
     "checkIn": "تسجيل الدخول",
     "checkOut": "تسجيل الخروج",
     "addGuest": "إضافة ضيف",
+    "paymentMode": "طريقة الدفع",
+    "paid": "مدفوع",
+    "free": "مجاني",
+    "amountPaid": "المبلغ المدفوع",
+    "attachReceipt": "إرفاق إيصال الدفع",
+    "chooseFile": "اختر ملفاً (صورة أو PDF)",
+    "freeBookingNote": "هذه إقامة مجانية. لن يتم تسجيل أي دفعة ولن يُحتسب هذا الحجز ضمن الإيرادات.",
     "deposit": "تأمين",
     "markRefunded": "تعيين كمسترد",
     "refunded": "مسترد",
@@ -220,7 +237,11 @@
     "paid": "مدفوع عبر ثواني",
     "pendingReview": "قيد المراجعة",
     "returnHome": "العودة للرئيسية",
-    "bookAnother": "حجز إقامة أخرى"
+    "bookAnother": "حجز إقامة أخرى",
+    "viewInvoice": "عرض الفاتورة",
+    "bankTransferPending": "سيتم إصدار فاتورتك الضريبية بعد موافقة فريقنا على التحويل البنكي.",
+    "mobileTransfer": "تحويل عبر الجوال (واتساب/تطبيق البنك):",
+    "getLocationPin": "الحصول على الموقع"
   },
   "invoices": {
     "invoiceCenter": "مركز الفواتير",

@@ -48,6 +48,7 @@
     "eveningOverview": "Evening Overview",
     "totalRevenue": "Total Revenue",
     "last30Days": "Last 30 days performance",
+    "paidBookings": "From confirmed paid bookings",
     "pendingBookings": "Pending Bookings",
     "actionRequired": "Action Required",
     "chaletAvailability": "Chalet Availability",
@@ -77,12 +78,21 @@
     "reviews": "reviews"
   },
   "calendar": {
-    "totalBookings": "Total bookings",
+    "totalBookings": "Total Bookings",
     "nextArrivals": "Next Arrivals",
     "recentTransactions": "Recent Transactions",
     "noTransactions": "No transactions yet",
     "noUpcoming": "No upcoming arrivals",
-    "revenue": "Revenue"
+    "revenue": "Revenue",
+    "bookingsLabel": "Bookings",
+    "tapToCompare": "Compare",
+    "monthlyComparison": "Monthly Comparison",
+    "currentVsPrevious": "Current month vs. previous month performance",
+    "currentMonth": "Current Month",
+    "thisMonth": "This Month",
+    "lastMonth": "Last Month",
+    "occupancy": "Occupancy",
+    "fromLastMonth": "from last month"
   },
   "guests": {
     "guestManagement": "Guest Management",
@@ -111,6 +121,13 @@
     "checkIn": "Check-in",
     "checkOut": "Check-out",
     "addGuest": "Add Guest",
+    "paymentMode": "Payment Mode",
+    "paid": "Paid",
+    "free": "Free",
+    "amountPaid": "Amount Paid",
+    "attachReceipt": "Attach Payment Receipt",
+    "chooseFile": "Choose file (image or PDF)",
+    "freeBookingNote": "This is a complimentary stay. No payment will be recorded and the booking will not count toward revenue.",
     "deposit": "Deposit",
     "markRefunded": "Mark Refunded",
     "refunded": "Refunded",
@@ -220,7 +237,11 @@
     "paid": "Paid via Thawani",
     "pendingReview": "Pending Review",
     "returnHome": "Return Home",
-    "bookAnother": "Book Another Stay"
+    "bookAnother": "Book Another Stay",
+    "viewInvoice": "View Invoice",
+    "bankTransferPending": "Your tax invoice will be generated once our team approves your bank transfer.",
+    "mobileTransfer": "Mobile Transfer (WhatsApp/Bank App):",
+    "getLocationPin": "Get Location Pin"
   },
   "invoices": {
     "invoiceCenter": "Invoice Centre",

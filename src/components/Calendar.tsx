@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { transactionsApi } from '../services/api';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,7 @@ interface RealtimeBooking {
   check_out: string;
   nights: number;
   total_amount: number;
+  grandTotal?: number;
   status: string;
   payment_status: string;
   created_at: string;
@@ -35,6 +36,7 @@ export const Calendar: React.FC = () => {
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCompare, setShowCompare] = useState(false);
 
   // Calendar navigation
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
@@ -108,9 +110,54 @@ export const Calendar: React.FC = () => {
 
   const bookedDayMap = getBookedDayMap();
 
-  const confirmedCount = bookings.filter(b => b.status === 'confirmed' || b.status === 'checked-in').length;
-  const pendingCount = bookings.filter(b => b.status === 'pending').length;
-  const totalRevenue = bookings.filter(b => b.payment_status === 'paid').reduce((sum, b) => sum + b.total_amount, 0);
+  // Helper: get non-cancelled bookings that overlap a given month
+  const getMonthBookings = (month: number, year: number) => {
+    const mDays = getDaysInMonth(month, year);
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month, mDays, 23, 59, 59);
+    return bookings.filter(b => {
+      if (b.status === 'cancelled') return false;
+      const ci = new Date(b.check_in);
+      const co = new Date(b.check_out);
+      return co >= monthStart && ci <= monthEnd;
+    });
+  };
+
+  // Current month stats
+  const currentMonthBookings = useMemo(() => getMonthBookings(currentMonth, currentYear), [bookings, currentMonth, currentYear]);
+  const occupiedDays = bookedDayMap.size;
+  const occupancyPct = daysInMonth > 0 ? Math.round((occupiedDays / daysInMonth) * 100) : 0;
+
+  // Previous month stats (for compare)
+  const prevMonthIdx = currentMonth === 0 ? 11 : currentMonth - 1;
+  const prevYearIdx = currentMonth === 0 ? currentYear - 1 : currentYear;
+  const prevMonthBookings = useMemo(() => getMonthBookings(prevMonthIdx, prevYearIdx), [bookings, prevMonthIdx, prevYearIdx]);
+  const prevDaysInMonth = getDaysInMonth(prevMonthIdx, prevYearIdx);
+
+  // Previous month occupancy: count unique occupied days
+  const prevOccupiedDays = useMemo(() => {
+    const daySet = new Set<number>();
+    for (const b of prevMonthBookings) {
+      const ci = new Date(b.check_in);
+      const co = new Date(b.check_out);
+      const startDay = ci.getMonth() === prevMonthIdx && ci.getFullYear() === prevYearIdx ? ci.getDate() : 1;
+      const endDay = co.getMonth() === prevMonthIdx && co.getFullYear() === prevYearIdx ? co.getDate() : prevDaysInMonth;
+      for (let d = startDay; d <= endDay; d++) daySet.add(d);
+    }
+    return daySet.size;
+  }, [prevMonthBookings, prevMonthIdx, prevYearIdx, prevDaysInMonth]);
+  const prevOccupancyPct = prevDaysInMonth > 0 ? Math.round((prevOccupiedDays / prevDaysInMonth) * 100) : 0;
+
+  // Revenue: current vs previous
+  const currentRevenue = currentMonthBookings.filter(b => b.payment_status === 'paid').reduce((s, b) => s + (Number(b.grandTotal) || Number(b.total_amount) || 0), 0);
+  const prevRevenue = prevMonthBookings.filter(b => b.payment_status === 'paid').reduce((s, b) => s + (Number(b.grandTotal) || Number(b.total_amount) || 0), 0);
+
+  // Growth percentages
+  const bookingGrowth = prevMonthBookings.length > 0 ? Math.round(((currentMonthBookings.length - prevMonthBookings.length) / prevMonthBookings.length) * 100) : (currentMonthBookings.length > 0 ? 100 : 0);
+  const revenueGrowth = prevRevenue > 0 ? Math.round(((currentRevenue - prevRevenue) / prevRevenue) * 100) : (currentRevenue > 0 ? 100 : 0);
+
+  const confirmedCount = currentMonthBookings.filter(b => b.status === 'confirmed' || b.status === 'checked-in').length;
+  const pendingCount = currentMonthBookings.filter(b => b.status === 'pending').length;
   const upcomingArrivals = bookings
     .filter(b => b.status === 'confirmed' || b.status === 'pending')
     .sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime())
@@ -154,21 +201,137 @@ export const Calendar: React.FC = () => {
             <p className="text-amber-800 font-headline text-2xl font-bold">{pendingCount}</p>
           </div>
         </motion.div>
+        {/* Occupancy Widget — click to compare */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white p-5 rounded-xl flex flex-col justify-between shadow-sm border border-primary-navy/5 h-32"
+          onClick={() => setShowCompare(true)}
+          className="bg-white p-5 rounded-xl flex flex-col justify-between shadow-sm border border-primary-navy/5 h-32 cursor-pointer hover:border-secondary-gold/40 hover:shadow-md transition-all group"
         >
-          <Banknote className="text-primary-navy" size={24} />
+          <div className="flex items-center justify-between">
+            <BarChart3 className="text-secondary-gold" size={24} />
+            <span className="text-[8px] font-bold uppercase tracking-widest text-primary-navy/30 group-hover:text-secondary-gold transition-colors">{t('calendar.tapToCompare')}</span>
+          </div>
           <div>
-            <p className="text-primary-navy/40 text-[10px] font-bold uppercase tracking-widest">{t('calendar.revenue')}</p>
             <p className="text-primary-navy font-headline text-2xl font-bold">
-              {(totalRevenue / 1000).toFixed(1)}k <span className="text-xs">OMR</span>
+              {currentMonthBookings.length} <span className="text-xs font-medium text-primary-navy/50">{t('calendar.bookingsLabel')}</span>
             </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex-1 h-1.5 bg-primary-navy/10 rounded-full overflow-hidden">
+                <div className="h-full bg-secondary-gold rounded-full transition-all" style={{ width: `${occupancyPct}%` }} />
+              </div>
+              <span className="text-[10px] font-bold text-primary-navy/50">{occupancyPct}%</span>
+            </div>
           </div>
         </motion.div>
       </section>
+
+      {/* Compare Modal */}
+      <AnimatePresence>
+        {showCompare && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowCompare(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[24px] w-full max-w-md shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-primary-navy/5 flex justify-between items-center">
+                <div>
+                  <h3 className="font-headline text-lg font-bold text-primary-navy">{t('calendar.monthlyComparison')}</h3>
+                  <p className="text-xs text-primary-navy/50 font-medium">{t('calendar.currentVsPrevious')}</p>
+                </div>
+                <button onClick={() => setShowCompare(false)} className="p-2 hover:bg-primary-navy/5 rounded-full">
+                  <X size={18} className="text-primary-navy/40" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Current Month Header */}
+                <div className="text-center space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">{t('calendar.currentMonth')}</p>
+                  <p className="font-headline text-lg font-bold text-primary-navy">{monthName}</p>
+                </div>
+
+                {/* Bookings Comparison */}
+                <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.totalBookings')}</span>
+                    <div className="flex items-center gap-1">
+                      {bookingGrowth !== 0 && (
+                        <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", bookingGrowth > 0 ? "text-emerald-600" : "text-red-500")}>
+                          {bookingGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {bookingGrowth > 0 ? '+' : ''}{bookingGrowth}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
+                      <p className="font-headline text-2xl font-bold text-primary-navy">{currentMonthBookings.length}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.thisMonth')}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 text-center border border-primary-navy/5">
+                      <p className="font-headline text-2xl font-bold text-primary-navy/50">{prevMonthBookings.length}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-1">{t('calendar.lastMonth')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Occupancy Comparison */}
+                <div className="bg-surface-container-low rounded-xl p-4 space-y-3">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary-navy/50">{t('calendar.occupancy')}</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline text-xl font-bold text-secondary-gold">{occupancyPct}%</span>
+                      </div>
+                      <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${occupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} className="h-full bg-secondary-gold rounded-full" />
+                      </div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.thisMonth')}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline text-xl font-bold text-primary-navy/40">{prevOccupancyPct}%</span>
+                      </div>
+                      <div className="h-2 bg-primary-navy/10 rounded-full overflow-hidden">
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${prevOccupancyPct}%` }} transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }} className="h-full bg-primary-navy/30 rounded-full" />
+                      </div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40">{t('calendar.lastMonth')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue Comparison */}
+                <div className="bg-primary-navy rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t('calendar.revenue')}</span>
+                    {revenueGrowth !== 0 && (
+                      <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", revenueGrowth > 0 ? "text-emerald-400" : "text-red-400")}>
+                        {revenueGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {revenueGrowth > 0 ? '+' : ''}{revenueGrowth}% {t('calendar.fromLastMonth')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-headline text-xl font-bold text-secondary-gold">{currentRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.thisMonth')} (OMR)</p>
+                    </div>
+                    <div>
+                      <p className="font-headline text-xl font-bold text-white/40">{prevRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-1">{t('calendar.lastMonth')} (OMR)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <motion.section
         initial={{ opacity: 0, scale: 0.98 }}
