@@ -17,6 +17,7 @@ export const Confirmation: React.FC = () => {
   const propertyName = state?.propertyName || 'Al-Nakheel Sanctuary';
 
   const [bankPhone, setBankPhone] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
 
   // Auto-redirect if no valid booking
   useEffect(() => {
@@ -25,14 +26,15 @@ export const Confirmation: React.FC = () => {
     }
   }, [booking, navigate]);
 
-  // Load bank phone from Firestore settings
+  // Load property details from Firestore (bankPhone for bank transfers, licenseNumber for PDFs)
   useEffect(() => {
-    if (!booking || booking.payment_method !== 'bank_transfer') return;
+    if (!booking) return;
     getDoc(doc(db, 'settings', 'property_details'))
       .then(snap => {
-        if (snap.exists() && snap.data().bankPhone) {
-          setBankPhone(snap.data().bankPhone);
-        }
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.bankPhone) setBankPhone(data.bankPhone);
+        if (data.licenseNumber) setLicenseNumber(data.licenseNumber);
       })
       .catch(console.error);
   }, [booking]);
@@ -83,6 +85,7 @@ export const Confirmation: React.FC = () => {
           { description: stayLabel, amount: stayTotal },
           ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
         ],
+        licenseNumber,
       }, lang);
       const blobUrl = pdfDoc.output('bloburl');
       window.open(blobUrl as string, '_blank');

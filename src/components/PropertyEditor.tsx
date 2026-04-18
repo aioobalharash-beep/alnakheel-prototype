@@ -29,6 +29,7 @@ interface PropertyDetails {
   termsOfStay: BilingualField;
   footerText: BilingualField;
   whatsappNumber: string;
+  licenseNumber: string;
   quickFacts?: { icon: string; label: string; label_ar: string }[];
 }
 
@@ -69,6 +70,7 @@ const DEFAULT_DATA: PropertyDetails = {
   termsOfStay: { en: '', ar: '' },
   footerText: { en: '', ar: '' },
   whatsappNumber: '',
+  licenseNumber: '',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
@@ -671,6 +673,17 @@ const PropertyEditorComponent: React.FC = () => {
             className={inputClass}
           />
           <p className="text-[10px] text-primary-navy/40 font-medium">Used for the footer WhatsApp link: https://wa.me/[number]. Leave blank to hide the icon.</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Tourism License Number</label>
+          <input
+            type="text"
+            value={form.licenseNumber}
+            onChange={(e) => setForm(prev => ({ ...prev, licenseNumber: e.target.value }))}
+            placeholder="e.g. TL-889"
+            className={inputClass}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">Displayed in the public footer and on generated PDFs. Leave blank to hide.</p>
         </div>
       </section>
 

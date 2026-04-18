@@ -14,6 +14,7 @@ interface InvoiceData {
   vat_amount: number;
   total_amount: number;
   items?: { description: string; amount: number }[];
+  licenseNumber?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,9 +148,9 @@ function buildInvoiceHtml(
 
   const companyName = isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES';
   const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
-  const regInfo = isAr
-    ? 'سجل تجاري: 1234567  |  ترخيص سياحي: TL-889'
-    : 'CR: 1234567  |  Tourism License: TL-889';
+  const regInfo = invoice.licenseNumber
+    ? (isAr ? `ترخيص سياحي: ${invoice.licenseNumber}` : `Tourism License: ${invoice.licenseNumber}`)
+    : '';
 
   const invoiceTitle = isAr ? 'فاتورة' : 'INVOICE';
   const billedToLabel = isAr ? 'فاتورة إلى' : 'BILLED TO';
@@ -237,7 +238,7 @@ function buildInvoiceHtml(
       <div style="${textStart};margin-bottom:4px;">
         <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">${companyName}</div>
         <div style="font-size:10px;color:#888;margin-top:4px;">${location}</div>
-        <div style="font-size:10px;color:#888;margin-top:2px;">${regInfo}</div>
+        ${regInfo ? `<div style="font-size:10px;color:#888;margin-top:2px;">${regInfo}</div>` : ''}
       </div>
 
       <hr style="border:none;border-top:1px solid ${LIGHT_BORDER};margin:24px 0;" />

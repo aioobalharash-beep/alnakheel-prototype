@@ -47,6 +47,7 @@ export const Invoices: React.FC = () => {
   const [whatsappTemplate, setWhatsappTemplate] = useState<string>(
     `Assalamu Alaikum {{guest_name}},\n\nHere is your invoice for your stay at Al-Nakheel Sanctuary:\n\nBooking Ref: {{booking_id}}\nStay: {{stay_amount}} OMR\n{{deposit_line}}\nTotal: {{total_amount}} OMR\n{{receipt_line}}\n\nThank you for choosing Al-Nakheel.`
   );
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [receiptViewURL, setReceiptViewURL] = useState<string | null>(null);
@@ -56,19 +57,25 @@ export const Invoices: React.FC = () => {
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
   const [hasMore, setHasMore] = useState(true);
 
-  // Load WhatsApp template from Firestore on mount
+  // Load WhatsApp template + property licenseNumber from Firestore on mount
   useEffect(() => {
-    const loadTemplate = async () => {
+    const loadSettings = async () => {
       try {
-        const snap = await getDoc(doc(db, 'settings', 'notifications'));
-        if (snap.exists() && snap.data().whatsappTemplate) {
-          setWhatsappTemplate(snap.data().whatsappTemplate);
+        const [notifSnap, propSnap] = await Promise.all([
+          getDoc(doc(db, 'settings', 'notifications')),
+          getDoc(doc(db, 'settings', 'property_details')),
+        ]);
+        if (notifSnap.exists() && notifSnap.data().whatsappTemplate) {
+          setWhatsappTemplate(notifSnap.data().whatsappTemplate);
+        }
+        if (propSnap.exists() && propSnap.data().licenseNumber) {
+          setLicenseNumber(propSnap.data().licenseNumber);
         }
       } catch (err) {
-        console.error('Failed to load WhatsApp template:', err);
+        console.error('Failed to load settings:', err);
       }
     };
-    loadTemplate();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -166,6 +173,7 @@ export const Invoices: React.FC = () => {
     generateVATReportPDF({
       month: label,
       taxId: '1009283746',
+      licenseNumber,
       totalRevenue,
       vatRate: 5,
       vatCollected,
@@ -573,7 +581,7 @@ export const Invoices: React.FC = () => {
               <div className="p-5 bg-surface-container-low space-y-3 border-t border-primary-navy/5">
                 <div className="flex gap-3">
                   <button
-                    onClick={async () => downloadInvoicePDF(selectedInvoice, i18n.language)}
+                    onClick={async () => downloadInvoicePDF({ ...selectedInvoice, licenseNumber }, i18n.language)}
                     className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
                   >
                     <Download size={14} />

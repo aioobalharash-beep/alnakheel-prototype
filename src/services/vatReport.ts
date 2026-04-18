@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 interface VATReportData {
   month: string;
   taxId: string;
+  licenseNumber?: string;
   totalRevenue: number;
   vatRate: number;
   vatCollected: number;
@@ -34,6 +35,11 @@ export function generateVATReportPDF(data: VATReportData) {
   doc.setTextColor(80);
   doc.text(`Tax ID: ${data.taxId}`, ml, y);
   doc.text('Muscat, Sultanate of Oman', mr, y, { align: 'right' });
+
+  if (data.licenseNumber) {
+    y += 5;
+    doc.text(`Tourism License: ${data.licenseNumber}`, ml, y);
+  }
 
   // Thin navy rule
   y += 6;

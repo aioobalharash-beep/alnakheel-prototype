@@ -36,6 +36,7 @@ interface PropertyDetails {
   quickFacts?: { icon: string; label: string; label_ar: string }[];
   footerText?: string | BilingualField;
   whatsappNumber?: string;
+  licenseNumber?: string;
 }
 
 const DEFAULTS: PropertyDetails = {
@@ -77,13 +78,14 @@ interface FooterProps {
   chaletName: string;
   footerText: string;
   whatsappNumber: string;
+  licenseNumber: string;
   termsLabel: string;
   aboutLabel: string;
   onTerms: () => void;
   onAbout: () => void;
 }
 
-const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber, termsLabel, aboutLabel, onTerms, onAbout }) => {
+const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber, licenseNumber, termsLabel, aboutLabel, onTerms, onAbout }) => {
   const waDigits = whatsappNumber.replace(/\D/g, '');
   const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
   const year = new Date().getFullYear();
@@ -99,9 +101,11 @@ const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber
           &copy; {year} {chaletName}
         </p>
       )}
-      <div className="text-[10px] text-primary-navy/30 uppercase font-bold tracking-widest text-center">
-        CR: 1234567 | Tourism License: TL-889
-      </div>
+      {licenseNumber && (
+        <div className="text-[10px] text-primary-navy/30 uppercase font-bold tracking-widest text-center">
+          Tourism License: {licenseNumber}
+        </div>
+      )}
       <div className="flex gap-6 items-center">
         <button onClick={onTerms} className="text-xs text-primary-navy/60 underline font-bold">{termsLabel}</button>
         <button onClick={onAbout} className="text-xs text-primary-navy/60 underline font-bold">{aboutLabel}</button>
@@ -295,6 +299,7 @@ export const Sanctuary: React.FC = () => {
         chaletName={bl(data.name, lang)}
         footerText={data.footerText ? bl(data.footerText, lang) : ''}
         whatsappNumber={data.whatsappNumber || ''}
+        licenseNumber={data.licenseNumber || ''}
         termsLabel={t('sanctuary.termsOfStay')}
         aboutLabel={t('sanctuary.aboutUs')}
         onTerms={() => navigate('/terms')}
