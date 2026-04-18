@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Banknote, TrendingUp, Moon, Download, Calendar as CalendarIcon, Search, FileBarChart } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generatePerformanceReportPDF } from '../services/performanceReport';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +34,17 @@ export const Reports: React.FC = () => {
   // Filtered results
   const [filteredBookings, setFilteredBookings] = useState<RealtimeBooking[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [licenseNumber, setLicenseNumber] = useState('');
+
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'property_details'))
+      .then(snap => {
+        if (snap.exists() && snap.data().licenseNumber) {
+          setLicenseNumber(snap.data().licenseNumber);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
@@ -77,6 +88,7 @@ export const Reports: React.FC = () => {
         totalBookings,
         totalNights,
         avgStay,
+        licenseNumber,
         bookings: filteredBookings.map(b => ({
           guest_name: b.guest_name,
           check_in: b.check_in,

@@ -7,6 +7,7 @@ interface PerformanceReportData {
   totalBookings: number;
   totalNights: number;
   avgStay: number;
+  licenseNumber?: string;
   bookings: { guest_name: string; check_in: string; check_out: string; nights: number; amount: number }[];
 }
 
@@ -33,8 +34,10 @@ export function generatePerformanceReportPDF(data: PerformanceReportData) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(80);
-  doc.text('Tax ID: 1009283746', ml, y);
   doc.text('Muscat, Sultanate of Oman', mr, y, { align: 'right' });
+  if (data.licenseNumber) {
+    doc.text(`Tourism License: ${data.licenseNumber}`, ml, y);
+  }
 
   // Thin navy rule
   y += 6;

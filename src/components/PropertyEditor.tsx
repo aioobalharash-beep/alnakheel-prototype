@@ -27,6 +27,9 @@ interface PropertyDetails {
   iban: string;
   bankPhone: string;
   termsOfStay: BilingualField;
+  footerText: BilingualField;
+  whatsappNumber: string;
+  licenseNumber: string;
   quickFacts?: { icon: string; label: string; label_ar: string }[];
 }
 
@@ -65,11 +68,14 @@ const DEFAULT_DATA: PropertyDetails = {
   iban: 'OM12 0123 0000 0012 3456 789',
   bankPhone: '',
   termsOfStay: { en: '', ar: '' },
+  footerText: { en: '', ar: '' },
+  whatsappNumber: '',
+  licenseNumber: '',
 };
 
 const inputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
 
-export const PropertyEditor: React.FC = () => {
+const PropertyEditorComponent: React.FC = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState<PropertyDetails>(DEFAULT_DATA);
   const [loading, setLoading] = useState(true);
@@ -117,6 +123,7 @@ export const PropertyEditor: React.FC = () => {
             headline: toBilingual(data.headline),
             description: toBilingual(data.description),
             termsOfStay: toBilingual(data.termsOfStay),
+            footerText: toBilingual(data.footerText),
             features,
             features_ar: data.features_ar || features.map(() => ''),
             pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
@@ -627,6 +634,59 @@ export const PropertyEditor: React.FC = () => {
         </div>
       </section>
 
+      {/* Footer & Contact */}
+      <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
+        <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Footer &amp; Contact</h3>
+        <p className="text-[10px] text-primary-navy/40 font-medium">
+          Text shown at the bottom of the guest landing page. WhatsApp number powers the chat icon in the footer.
+        </p>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Footer Description (English)</label>
+          <textarea
+            value={form.footerText.en}
+            onChange={(e) => setForm(prev => ({ ...prev, footerText: { ...prev.footerText, en: e.target.value } }))}
+            rows={3}
+            placeholder="e.g. Exceptional luxury chalets curated for the modern traveler."
+            className={cn(inputClass, "leading-relaxed resize-none")}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+            <Languages size={12} /> Footer Description (Arabic)
+          </label>
+          <textarea
+            dir="rtl"
+            value={form.footerText.ar}
+            onChange={(e) => setForm(prev => ({ ...prev, footerText: { ...prev.footerText, ar: e.target.value } }))}
+            rows={3}
+            placeholder="أدخل وصف التذييل بالعربية..."
+            className={cn(inputClass, "leading-relaxed resize-none")}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">WhatsApp Number</label>
+          <input
+            type="tel"
+            value={form.whatsappNumber}
+            onChange={(e) => setForm(prev => ({ ...prev, whatsappNumber: e.target.value }))}
+            placeholder="e.g. 96891000001 (country code + number, no + or spaces)"
+            className={inputClass}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">Used for the footer WhatsApp link: https://wa.me/[number]. Leave blank to hide the icon.</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">Tourism License Number</label>
+          <input
+            type="text"
+            value={form.licenseNumber}
+            onChange={(e) => setForm(prev => ({ ...prev, licenseNumber: e.target.value }))}
+            placeholder="e.g. TL-889"
+            className={inputClass}
+          />
+          <p className="text-[10px] text-primary-navy/40 font-medium">Displayed in the public footer and on generated PDFs. Leave blank to hide.</p>
+        </div>
+      </section>
+
       {/* Description */}
       <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
         <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">Description</h3>
@@ -733,3 +793,5 @@ export const PropertyEditor: React.FC = () => {
     </div>
   );
 };
+
+export const PropertyEditor = React.memo(PropertyEditorComponent);
