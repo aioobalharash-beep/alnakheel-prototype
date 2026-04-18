@@ -34,6 +34,8 @@ interface PropertyDetails {
   gallery: { url: string; label: string }[];
   pricing?: PricingSettings;
   quickFacts?: { icon: string; label: string; label_ar: string }[];
+  footerText?: string | BilingualField;
+  whatsappNumber?: string;
 }
 
 const DEFAULTS: PropertyDetails = {
@@ -70,6 +72,59 @@ const QuickFactCard = React.memo<QuickFactCardProps>(({ iconKey, label }) => {
   );
 });
 QuickFactCard.displayName = 'QuickFactCard';
+
+interface FooterProps {
+  chaletName: string;
+  footerText: string;
+  whatsappNumber: string;
+  termsLabel: string;
+  aboutLabel: string;
+  onTerms: () => void;
+  onAbout: () => void;
+}
+
+const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber, termsLabel, aboutLabel, onTerms, onAbout }) => {
+  const waDigits = whatsappNumber.replace(/\D/g, '');
+  const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
+  const year = new Date().getFullYear();
+  return (
+    <footer className="w-full py-12 px-8 bg-white border-t border-primary-navy/5 flex flex-col items-center gap-6">
+      <div className="text-secondary-gold font-bold font-headline text-xl">{chaletName}</div>
+      {footerText ? (
+        <p className="text-xs text-center text-primary-navy/60 leading-relaxed max-w-xs whitespace-pre-line">
+          {footerText}
+        </p>
+      ) : (
+        <p className="text-xs text-center text-primary-navy/60 leading-relaxed max-w-xs">
+          &copy; {year} {chaletName}
+        </p>
+      )}
+      <div className="text-[10px] text-primary-navy/30 uppercase font-bold tracking-widest text-center">
+        CR: 1234567 | Tourism License: TL-889
+      </div>
+      <div className="flex gap-6 items-center">
+        <button onClick={onTerms} className="text-xs text-primary-navy/60 underline font-bold">{termsLabel}</button>
+        <button onClick={onAbout} className="text-xs text-primary-navy/60 underline font-bold">{aboutLabel}</button>
+      </div>
+      <div className="flex gap-8 mt-2">
+        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+          <Instagram size={20} />
+        </a>
+        {waHref && (
+          <a href={waHref} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
+            <MessageCircle size={20} />
+          </a>
+        )}
+      </div>
+      {footerText && (
+        <p className="text-[10px] text-center text-primary-navy/40 font-bold">
+          &copy; {year} {chaletName}
+        </p>
+      )}
+    </footer>
+  );
+});
+Footer.displayName = 'Footer';
 
 export const Sanctuary: React.FC = () => {
   const navigate = useNavigate();
@@ -236,30 +291,15 @@ export const Sanctuary: React.FC = () => {
       </section>
 
       {/* Footer Info */}
-      <footer className="w-full py-12 px-8 bg-white border-t border-primary-navy/5 flex flex-col items-center gap-6">
-        <div className="text-secondary-gold font-bold font-headline text-xl">{bl(data.name, lang)}</div>
-        <p className="text-xs text-center text-primary-navy/60 leading-relaxed max-w-xs">
-          {t('sanctuary.footerDesc')}
-        </p>
-        <div className="text-[10px] text-primary-navy/30 uppercase font-bold tracking-widest text-center">
-          CR: 1234567 | Tourism License: TL-889
-        </div>
-        <div className="flex gap-6 items-center">
-          <button onClick={() => navigate('/terms')} className="text-xs text-primary-navy/60 underline font-bold">{t('sanctuary.termsOfStay')}</button>
-          <button onClick={() => navigate('/about')} className="text-xs text-primary-navy/60 underline font-bold">{t('sanctuary.aboutUs')}</button>
-        </div>
-        <div className="flex gap-8 mt-2">
-          <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
-            <Instagram size={20} />
-          </a>
-          <a href="https://wa.me/96891000001" target="_blank" rel="noopener noreferrer" className="text-primary-navy/40 hover:text-secondary-gold transition-colors">
-            <MessageCircle size={20} />
-          </a>
-        </div>
-        <p className="text-[10px] text-center text-primary-navy/40 font-bold">
-          &copy; Al-Nakheel Luxury Chalet. 2024
-        </p>
-      </footer>
+      <Footer
+        chaletName={bl(data.name, lang)}
+        footerText={data.footerText ? bl(data.footerText, lang) : ''}
+        whatsappNumber={data.whatsappNumber || ''}
+        termsLabel={t('sanctuary.termsOfStay')}
+        aboutLabel={t('sanctuary.aboutUs')}
+        onTerms={() => navigate('/terms')}
+        onAbout={() => navigate('/about')}
+      />
 
       {/* Floating Book Now */}
       <button
