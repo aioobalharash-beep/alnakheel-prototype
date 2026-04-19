@@ -8,6 +8,8 @@ import { downloadInvoicePDF } from '../services/pdf';
 import { generateVATReportPDF } from '../services/vatReport';
 import type { Invoice } from '../types';
 import { useTranslation } from 'react-i18next';
+import { getClientConfig, whatsappHref } from '../config/clientConfig';
+import { BrandMark } from './BrandMark';
 
 interface RealtimeBooking {
   id: string;
@@ -40,6 +42,7 @@ function formatPhone(phone: string): string {
 
 export const Invoices: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const config = getClientConfig();
   const [bookings, setBookings] = useState<RealtimeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -174,6 +177,8 @@ export const Invoices: React.FC = () => {
       month: label,
       taxId: '1009283746',
       licenseNumber,
+      chaletName: config.chaletName,
+      adminName: config.admin.name,
       totalRevenue,
       vatRate: 5,
       vatCollected,
@@ -538,7 +543,7 @@ export const Invoices: React.FC = () => {
               <div className="p-6 space-y-6 text-sm">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
-                    <p className="font-bold text-primary-navy text-base uppercase tracking-tight">AL-NAKHEEL LUXURY PROPERTIES</p>
+                    <BrandMark variant="light" size="sm" className="uppercase tracking-tight" />
                     <p className="text-xs text-primary-navy/50 font-medium">Muscat, Sultanate of Oman</p>
                   </div>
                 </div>
@@ -581,7 +586,7 @@ export const Invoices: React.FC = () => {
               <div className="p-5 bg-surface-container-low space-y-3 border-t border-primary-navy/5">
                 <div className="flex gap-3">
                   <button
-                    onClick={async () => downloadInvoicePDF({ ...selectedInvoice, licenseNumber }, i18n.language)}
+                    onClick={async () => downloadInvoicePDF({ ...selectedInvoice, licenseNumber, chaletName: config.chaletName, adminName: config.admin.name }, i18n.language)}
                     className="flex-1 border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors flex items-center justify-center gap-2"
                   >
                     <Download size={14} />
@@ -597,6 +602,17 @@ export const Invoices: React.FC = () => {
                     </button>
                   )}
                 </div>
+                {whatsappHref(config.social.whatsapp) && (
+                  <a
+                    href={whatsappHref(config.social.whatsapp) as string}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full border border-primary-navy/20 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-primary-navy hover:bg-white transition-colors"
+                  >
+                    <MessageCircle size={14} />
+                    Contact {config.chaletName}
+                  </a>
+                )}
               </div>
             </motion.div>
           </motion.div>

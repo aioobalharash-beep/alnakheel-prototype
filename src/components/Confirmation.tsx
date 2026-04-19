@@ -6,6 +6,7 @@ import { generateInvoicePDF } from '../services/pdf';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
+import { getClientConfig } from '../config/clientConfig';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -73,6 +74,7 @@ export const Confirmation: React.FC = () => {
   const handleViewInvoice = async () => {
     try {
       const depositLabel = lang === 'ar' ? 'مبلغ التأمين المسترد' : 'Refundable Security Deposit';
+      const config = getClientConfig();
       const pdfDoc = await generateInvoicePDF({
         id: booking.id,
         guest_name: booking.guest_name,
@@ -86,6 +88,8 @@ export const Confirmation: React.FC = () => {
           ...(deposit > 0 ? [{ description: depositLabel, amount: deposit }] : []),
         ],
         licenseNumber,
+        chaletName: config.chaletName,
+        adminName: config.admin.name,
       }, lang);
       const blobUrl = pdfDoc.output('bloburl');
       window.open(blobUrl as string, '_blank');

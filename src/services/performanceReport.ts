@@ -8,6 +8,8 @@ interface PerformanceReportData {
   totalNights: number;
   avgStay: number;
   licenseNumber?: string;
+  chaletName?: string;
+  adminName?: string;
   bookings: { guest_name: string; check_in: string; check_out: string; nights: number; amount: number }[];
 }
 
@@ -28,7 +30,7 @@ export function generatePerformanceReportPDF(data: PerformanceReportData) {
   doc.setFont('times', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(1, 31, 54);
-  doc.text('Al-Nakheel Luxury Properties', ml, y);
+  doc.text(data.chaletName || 'Luxury Stay', ml, y);
 
   y += 8;
   doc.setFont('helvetica', 'normal');
@@ -37,6 +39,11 @@ export function generatePerformanceReportPDF(data: PerformanceReportData) {
   doc.text('Muscat, Sultanate of Oman', mr, y, { align: 'right' });
   if (data.licenseNumber) {
     doc.text(`Tourism License: ${data.licenseNumber}`, ml, y);
+  }
+
+  if (data.adminName) {
+    y += 5;
+    doc.text(`Issued By: ${data.adminName}`, ml, y);
   }
 
   // Thin navy rule

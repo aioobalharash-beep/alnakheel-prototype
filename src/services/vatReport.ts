@@ -4,6 +4,8 @@ interface VATReportData {
   month: string;
   taxId: string;
   licenseNumber?: string;
+  chaletName?: string;
+  adminName?: string;
   totalRevenue: number;
   vatRate: number;
   vatCollected: number;
@@ -26,7 +28,7 @@ export function generateVATReportPDF(data: VATReportData) {
   doc.setFont('times', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(1, 31, 54);
-  doc.text('Al-Nakheel Luxury Properties', ml, y);
+  doc.text(data.chaletName || 'Luxury Stay', ml, y);
 
   // Tax ID + location — sans-serif
   y += 8;
@@ -39,6 +41,11 @@ export function generateVATReportPDF(data: VATReportData) {
   if (data.licenseNumber) {
     y += 5;
     doc.text(`Tourism License: ${data.licenseNumber}`, ml, y);
+  }
+
+  if (data.adminName) {
+    y += 5;
+    doc.text(`Issued By: ${data.adminName}`, ml, y);
   }
 
   // Thin navy rule

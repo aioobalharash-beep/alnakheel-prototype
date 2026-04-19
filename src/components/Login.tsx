@@ -7,10 +7,13 @@ import { sendPasswordResetEmail } from '../services/firebase';
 import { cn } from '@/src/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { LanguageToggle } from './LanguageToggle';
+import { getClientConfig } from '../config/clientConfig';
+import { BrandMark } from './BrandMark';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const { login, register, logout } = useAuth();
+  const config = getClientConfig();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,6 +53,16 @@ export const Login: React.FC = () => {
         await register({ name: name.trim(), email, password, phone: phone || undefined });
       } else {
         await login(email, password);
+        const adminEmail = config.admin.email;
+        const entered = email.trim().toLowerCase();
+        const storedRaw = localStorage.getItem('alnakheel_user');
+        const stored = storedRaw ? JSON.parse(storedRaw) : null;
+        if (stored?.role === 'admin' && adminEmail && entered !== adminEmail) {
+          logout();
+          setError('This account is not authorized as an administrator.');
+          setLoading(false);
+          return;
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
@@ -73,7 +86,7 @@ export const Login: React.FC = () => {
         className="w-full max-w-md"
       >
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold font-headline text-white tracking-tight">{t('common.alNakheel')}</h1>
+          <BrandMark variant="dark" size="lg" />
           <p className="text-white/40 text-[10px] uppercase tracking-[0.3em] font-bold mt-2">{t('common.luxuryDesertSanctuary')}</p>
         </div>
 
@@ -221,19 +234,10 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          {!isRegister && (
-            <div className="mt-6 p-4 bg-pearl-white rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-primary-navy/40 mb-2">Demo</p>
-              <div className="space-y-1 text-xs text-primary-navy/60">
-                <p><span className="font-bold text-primary-navy">Admin:</span> ahmed@alnakheel.om / admin123</p>
-                <p><span className="font-bold text-primary-navy">Client:</span> salim@guest.com / guest123</p>
-              </div>
-            </div>
-          )}
         </div>
 
         <p className="text-white/20 text-[10px] text-center mt-8 uppercase tracking-widest font-bold">
-          Al-Nakheel Luxury Properties
+          {config.chaletName}
         </p>
       </motion.div>
     </div>

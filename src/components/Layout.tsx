@@ -23,6 +23,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTranslation } from 'react-i18next';
 import { notificationsApi } from '../services/api';
 import { LanguageToggle } from './LanguageToggle';
+import { BrandMark } from './BrandMark';
 
 interface Notification {
   id: string;
@@ -119,8 +120,8 @@ export const Layout: React.FC = () => {
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-primary-navy text-white h-screen sticky top-0 py-8 px-6">
         <Link to="/" className="block mb-10 group">
-          <h1 className="text-2xl font-bold tracking-tighter uppercase group-hover:text-secondary-gold transition-colors">{t('common.alNakheel')}</h1>
-          <p className="text-[10px] font-lato uppercase tracking-widest text-white/50 font-bold">{t('nav.managementPortal')}</p>
+          <BrandMark variant="dark" size="md" className="group-hover:text-secondary-gold transition-colors" />
+          <p className="text-[10px] font-lato uppercase tracking-widest text-white/50 font-bold mt-1">{t('nav.managementPortal')}</p>
         </Link>
 
         <nav className="flex-1 space-y-2">
@@ -189,8 +190,8 @@ export const Layout: React.FC = () => {
               {/* Header + Close */}
               <div className="flex items-center justify-between mb-10">
                 <div>
-                  <h1 className="text-xl font-bold tracking-tighter uppercase">{t('common.alNakheel')}</h1>
-                  <p className="text-[9px] font-lato uppercase tracking-widest text-white/50 font-bold">{t('nav.managementPortal')}</p>
+                  <BrandMark variant="dark" size="sm" />
+                  <p className="text-[9px] font-lato uppercase tracking-widest text-white/50 font-bold mt-1">{t('nav.managementPortal')}</p>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors">
                   <X size={20} className="text-white/60" />
@@ -254,7 +255,9 @@ export const Layout: React.FC = () => {
             <button onClick={() => setMobileOpen(true)} className="md:hidden p-2 rounded-full hover:bg-primary-navy/5">
               <Menu size={20} />
             </button>
-            <Link to="/" className="text-lg font-bold tracking-[0.15em] uppercase font-headline md:hidden hover:text-secondary-gold transition-colors">{t('common.alNakheel')}</Link>
+            <Link to="/" className="md:hidden hover:text-secondary-gold transition-colors">
+              <BrandMark variant="light" size="sm" />
+            </Link>
             <h2 className="hidden md:block text-xl font-bold font-headline capitalize">{t(currentLabel)}</h2>
           </div>
 

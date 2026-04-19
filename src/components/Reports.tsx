@@ -6,6 +6,7 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/fi
 import { db } from '../services/firebase';
 import { generatePerformanceReportPDF } from '../services/performanceReport';
 import { useTranslation } from 'react-i18next';
+import { getClientConfig } from '../config/clientConfig';
 
 interface RealtimeBooking {
   id: string;
@@ -81,6 +82,7 @@ export const Reports: React.FC = () => {
 
     // Small delay so the spinner renders before the synchronous PDF work
     setTimeout(() => {
+      const config = getClientConfig();
       generatePerformanceReportPDF({
         startDate,
         endDate,
@@ -89,6 +91,8 @@ export const Reports: React.FC = () => {
         totalNights,
         avgStay,
         licenseNumber,
+        chaletName: config.chaletName,
+        adminName: config.admin.name,
         bookings: filteredBookings.map(b => ({
           guest_name: b.guest_name,
           check_in: b.check_in,

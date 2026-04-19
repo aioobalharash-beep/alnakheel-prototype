@@ -15,6 +15,8 @@ interface InvoiceData {
   total_amount: number;
   items?: { description: string; amount: number }[];
   licenseNumber?: string;
+  chaletName?: string;
+  adminName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,11 +148,12 @@ function buildInvoiceHtml(
     year: 'numeric',
   });
 
-  const companyName = isAr ? 'النخيل للعقارات الفاخرة' : 'AL-NAKHEEL LUXURY PROPERTIES';
+  const companyName = (invoice.chaletName || (isAr ? 'النخيل للعقارات الفاخرة' : 'Al-Nakheel Luxury Properties')).toUpperCase();
   const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
   const regInfo = invoice.licenseNumber
     ? (isAr ? `ترخيص سياحي: ${invoice.licenseNumber}` : `Tourism License: ${invoice.licenseNumber}`)
     : '';
+  const issuedByLabel = isAr ? 'صادرة بواسطة' : 'ISSUED BY';
 
   const invoiceTitle = isAr ? 'فاتورة' : 'INVOICE';
   const billedToLabel = isAr ? 'فاتورة إلى' : 'BILLED TO';
@@ -260,6 +263,7 @@ function buildInvoiceHtml(
         <div style="${textEnd};">
           <div style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;">${issueDateLabel}</div>
           <div style="font-size:14px;font-weight:700;">${dateStr}</div>
+          ${invoice.adminName ? `<div style="font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-top:10px;">${issuedByLabel}</div><div style="font-size:12px;font-weight:600;">${invoice.adminName}</div>` : ''}
         </div>
       </div>
 

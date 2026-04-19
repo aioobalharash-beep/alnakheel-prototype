@@ -7,6 +7,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
 import { bl, type BilingualField } from '../utils/bilingual';
+import { getClientConfig, whatsappHref } from '../config/clientConfig';
 
 interface PricingSettings {
   sunday_rate?: number;
@@ -86,8 +87,8 @@ interface FooterProps {
 }
 
 const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber, licenseNumber, termsLabel, aboutLabel, onTerms, onAbout }) => {
-  const waDigits = whatsappNumber.replace(/\D/g, '');
-  const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
+  const config = getClientConfig();
+  const waHref = whatsappHref(config.social.whatsapp) || whatsappHref(whatsappNumber);
   const year = new Date().getFullYear();
   return (
     <footer className="w-full py-12 px-8 bg-white border-t border-primary-navy/5 flex flex-col items-center gap-6">
